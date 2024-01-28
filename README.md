@@ -109,11 +109,8 @@ my_ml_package/
 
 ## Usage
 
-Briefly describe how to use your package, including basic commands or scripts to run.
+Place your data analysis scripts within the scripts/exploratory for initial exploration or scripts/report for final reports. Implement or utilize source code functionalities from the src directory as needed. New datasets should be stored in dedicated directories within data/external. Save trained models in models/trained_models and your analysis outputs, like figures and reports, in their respective directories within outputs. Ensure the models and output folders are named with a unique run identifier, typically a timestamp, to facilitate organization and traceability.
 
-## Contributing
-
-Provide guidelines for how others can contribute to your project.
 
 ## License
 
