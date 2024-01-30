@@ -1,22 +1,26 @@
-# tests/test_split_train_test.py
-import unittest
+import pytest
 from src.data.split_train_test import split_data
 import pandas as pd
 import numpy as np
 
-class TestSplitTrainTest(unittest.TestCase):
 
-    def setUp(self):
-        # Create a dummy dataset
-        self.X = pd.DataFrame(np.random.rand(100, 10))  # 100 samples, 10 features
-        self.Y = pd.DataFrame(np.random.rand(100, 1))   # 100 samples, 1 target
+def test_split_data_proportions():
+    # Create a dummy dataset
+    np.random.seed(0)
+    X = pd.DataFrame(np.random.rand(100, 10))  # 100 samples, 10 features
+    Y = pd.DataFrame(np.random.rand(100, 1))  # 100 samples, 1 target
 
-    def test_split_data_proportions(self):
-        X_train, Y_train, _, _, X_test, Y_test, _ = split_data(self.X, self.Y, train_prc=80, test_prc=20)
-        self.assertEqual(len(X_train), 80)
-        self.assertEqual(len(X_test), 20)
+    # Split the data into train and test sets
+    X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data(X, Y, train_prc=80, test_prc=20, stratified=False)
 
-    # Add more tests for stratified splits, random seed effect, etc.
+    # Check expected outputs
+    assert X_val is None
+    assert Y_val is None
+    assert cv_indices is not None
+    assert len(X_train) / len(X) == 0.8
+    assert len(X_test) / len(X) == 0.2
 
-if __name__ == '__main__':
-    unittest.main()
+
+    # Split the data into train and test sets
+    X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data(X, Y, train_prc=80, test_prc=20, stratified=True)
+
