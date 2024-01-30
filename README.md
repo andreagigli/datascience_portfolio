@@ -89,7 +89,7 @@ portfolio_ML_datascience/
     - If your project does not already have a `requirements.txt`, or if you want to update it, run `pipreqs`:
       ```
 	  cd portfolio_ML_datascience
-      pipreqs .
+      pipreqs --force . 
       ```
 
 2. **Install the package**:

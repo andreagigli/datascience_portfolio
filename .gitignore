@@ -1,5 +1,4 @@
 # Ignore these files and types
-requirements.txt
 *.egg-info
 *.idea
 
