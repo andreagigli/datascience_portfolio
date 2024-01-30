@@ -1,4 +1,4 @@
-## Custom Python package for Data Science and ML projects
+# Custom Python package for Data Science and ML projects
 
 ## Project Structure
 
