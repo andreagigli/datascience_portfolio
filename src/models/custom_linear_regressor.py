@@ -1,9 +1,10 @@
+import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
 
 class CustomModel(BaseEstimator, RegressorMixin):
-    def __init__(self, custom_parameter=1.0):
+    def __init__(self, custom_parameter: float = 1.0) -> None:
         """
         Initialize the CustomModel model.
 
@@ -13,7 +14,7 @@ class CustomModel(BaseEstimator, RegressorMixin):
         self.custom_parameter = custom_parameter
         self.model = None
 
-    def fit(self, X, y):
+    def fit(self, X: np.ndarray, y: np.ndarray) -> "CustomModel":
         """
         Fit the custom linear regression model to the data.
 
@@ -32,7 +33,7 @@ class CustomModel(BaseEstimator, RegressorMixin):
         self.model.fit(modified_X, y)
         return self
 
-    def predict(self, X):
+    def predict(self, X: np.ndarray):
         """
         Make predictions using the custom linear regression model.
 

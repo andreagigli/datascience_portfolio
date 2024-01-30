@@ -27,7 +27,7 @@ python analysis_exampledb.py
 --data_path ../../data/external/exampledb/california_housing.csv
 --data_loading_fn load_exampledb
 --model sklearn_RandomForestRegressor
---model_hparams "{\"n_estimators\": \"randint(10, 1000)\", \"max_depth\": 5}"
+--model_hparams "{\"n_estimators\": \"randint(10, 100)\", \"max_depth\": 5}"
 --preprocessing_fn preprocess_exampledb
 --feature_extraction_fn feature_exampledb
 --split_fn split_train_test
@@ -70,7 +70,6 @@ import argparse
 import json
 import logging
 import matplotlib.pyplot as plt
-import multiprocessing
 import numpy as np
 import os
 import pandas as pd
@@ -362,6 +361,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     reusing pre-trained models, and saving outputs including models, reports, and figures.
     """
     # Initialize logger
+    output_reports_dir = None
     if parsed_args.save_output:
         output_reports_dir = os.path.join(parsed_args.output_reports_dir, f"report_{parsed_args.run_id}")
         ensure_dir_exists(output_reports_dir)
@@ -432,12 +432,14 @@ def main(parsed_args: argparse.Namespace) -> None:
                 cv_results_df[float_columns] = cv_results_df[float_columns].round(4)
             else:
                 cv_results_df = None
-            model = search.best_estimator_
-            model_hparams = search.best_params_
+            if hasattr(search, 'best_estimator_'):
+                model = search.best_estimator_
+            else:
+                raise AttributeError("Failed to find the best estimator. The model fitting process did not complete successfully.")
+
         else:
             logger.info("Fitting the model...")
             model = model.fit(X_train.to_numpy(), np.squeeze(Y_train.to_numpy()))
-            model_hparams = model.get_params()
             cv_results_df = None
 
         # Compute model predictions
@@ -448,14 +450,17 @@ def main(parsed_args: argparse.Namespace) -> None:
     elif "tensorflow" in MODELS[parsed_args.model]:
         optimization_needed = True
         Y_pred = None
+        Y_train_pred = None
         cv_results_df = None
     elif "torch" in MODELS[parsed_args.model]:
         optimization_needed = True
         Y_pred = None
+        Y_train_pred = None
         cv_results_df = None
     else:
         optimization_needed = True
         Y_pred = None
+        Y_train_pred = None
         cv_results_df = None
 
     # Evaluate model predictions
@@ -465,8 +470,8 @@ def main(parsed_args: argparse.Namespace) -> None:
         np.squeeze(Y_pred),
         model,
         Y_test.columns.tolist(),
-        np.squeeze(Y_test.to_numpy()),
-        np.squeeze(Y_pred),
+        np.squeeze(Y_train.to_numpy()),
+        np.squeeze(Y_train_pred),
     )
 
     # Save results

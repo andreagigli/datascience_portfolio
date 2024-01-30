@@ -1,7 +1,19 @@
+from typing import Optional, Tuple, List
+
+import numpy as np
+from pandas import DataFrame
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 
 
-def split_data(X, Y, random_seed=None, train_prc=80, test_prc=20, n_folds=None, stratified=False):
+def split_data(
+    X: DataFrame,
+    Y: DataFrame,
+    random_seed: Optional[int] = None,
+    train_prc: int = 80,
+    test_prc: int = 20,
+    n_folds: Optional[int] = None,
+    stratified: bool = False
+) -> Tuple[DataFrame, DataFrame, Optional[DataFrame], Optional[DataFrame], DataFrame, DataFrame, Optional[List[Tuple[np.ndarray, np.ndarray]]]]:
     """
     Splits the dataset into training and test sets and provides cross-validation indices for k-fold cross-validation.
 

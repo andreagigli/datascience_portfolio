@@ -1,7 +1,10 @@
+from typing import Tuple
+
 import pandas as pd
+from pandas import DataFrame
 
 
-def load_data(fpath):
+def load_data(fpath: str) -> Tuple[DataFrame, DataFrame]:
     """
     Loads the California Housing dataset from a CSV file.
 

@@ -1,12 +1,17 @@
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from matplotlib.figure import Figure
+from pandas import DataFrame
 from scipy.stats import iqr
+from sklearn.base import BaseEstimator
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
-def calculate_metrics(Y_actual, Y_predicted):
+def calculate_metrics(Y_actual: np.ndarray, Y_predicted: np.ndarray) -> Dict[str, np.ndarray]:
     """
     Calculate various regression metrics.
 
@@ -26,7 +31,14 @@ def calculate_metrics(Y_actual, Y_predicted):
     return {'MAE': mae, 'MSE': mse, 'RMSE': rmse, 'NRMSE': nrmse, 'R2': r2}
 
 
-def evaluate(Y, Y_pred, model, target_name, Y_train=None, Y_train_pred=None):
+def evaluate(
+    Y: np.ndarray, 
+    Y_pred: np.ndarray, 
+    model: BaseEstimator, 
+    target_name: List[str], 
+    Y_train: Optional[np.ndarray] = None, 
+    Y_train_pred: Optional[np.ndarray] = None
+) -> Tuple[DataFrame, Dict[str, Figure]]:
     """
     Evaluates the performance of a regression model and generates plots of actual vs. predicted values
     for both test and training data.
