@@ -19,7 +19,7 @@ python analysis_exampledb.py
 --save_output
 --output_data_dir ../../data/processed
 --output_model_dir ../../models
---output_report_dir ../../outputs/reports
+--output_reports_dir ../../outputs/reports
 --output_figures_dir ../../outputs/figures
 
 2. Usage with hyperparameters optimization:
@@ -39,7 +39,7 @@ python analysis_exampledb.py
 --save_output
 --output_data_dir ../../data/processed
 --output_model_dir ../../models
---output_report_dir ../../outputs/reports
+--output_reports_dir ../../outputs/reports
 --output_figures_dir ../../outputs/figures
 
 3. Usage with tensorflow model
@@ -57,7 +57,7 @@ python analysis_exampledb.py
 --save_output
 --output_data_dir ../../data/processed
 --output_model_dir ../../models
---output_report_dir ../../outputs/reports
+--output_reports_dir ../../outputs/reports
 --output_figures_dir ../../outputs/figures
 
 3. Using a pre-trained model: ...
@@ -84,7 +84,7 @@ from scipy.stats import loguniform, randint, uniform, rv_continuous, rv_discrete
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Optional
 
 from src.utils.my_os import ensure_dir_exists
 
@@ -119,7 +119,7 @@ EVALUATION_FNS: Dict[str, str] = {
 }
 
 
-def check_split_args(split_fn: str, split_ratio: str, n_folds: int, model: str) -> None:
+def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
     """
     Check the consistency and validity of split function arguments.
 
@@ -131,40 +131,84 @@ def check_split_args(split_fn: str, split_ratio: str, n_folds: int, model: str) 
     Raises:
     ValueError: If any inconsistency is found in the arguments.
     """
-
     # Check that split_ratio is a string of numbers separated by spaces
     try:
         ratios = [float(num) for num in split_ratio.split()]
     except ValueError:
         raise ValueError("split_ratio must be a string of numbers separated by spaces.")
 
-    # Check that chosen splitting is available for chosen model
+    # Validation based on the chosen model's library
     model_module = MODELS.get(model, "")
     if "sklearn" in model_module:
-        model_type = "sklearn"
-    elif "tensorflow" in model_module or "torch" in model_module:
-        model_type = "tensorflow/pytorch"
-    else:
-        raise ValueError("Unknown model type.")
-
-    # Validation based on the chosen model's library
-    if model_type == "sklearn":  # Check that given parameters are consistent with sklearn's cross-validation
         if split_fn == "split_train_val_test":
             raise ValueError("Splitting function 'split_train_val_test' incompatible with sklearn models.")
         if len(ratios) != 2:
             raise ValueError("Split ratio for sklearn models must contain exactly two numbers.")
-        if not (n_folds and isinstance(n_folds, int)):
-            raise ValueError("Number of folds for sklearn models must be an integer.")
-    elif model_type == "tensorflow/pytorch":
+        # if not (n_folds and isinstance(n_folds, int)):
+        #     raise ValueError("Number of folds for sklearn models must be an integer.")
+
+    elif "tensorflow" in model_module or "torch" in model_module:
         if split_fn == "split_train_test":
             raise ValueError("Splitting function 'split_train_test' incompatible with sklearn models.")
         if len(ratios) != 3:
             raise ValueError("Split ratio for TensorFlow/PyTorch models must contain exactly three numbers.")
+        # if n_folds is not None:
+        #     raise ValueError("Number of folds should not be specified for TensorFlow/PyTorch models.")
+    else:
+        raise ValueError("Unknown model type.")
+
+
+def check_hparams_opt_args(model_hparams: str, split_fn: str, n_folds: Optional[int]) -> None:
+    """
+    Validates the format of model hyperparameters and checks their consistency with the data split function.
+    This function first checks if the model hyperparameters are in the correct JSON format and then validates
+    whether the values are appropriate (scalar or specified distribution strings for hyperparameter optimization).
+    It also checks if the 'n_folds' argument is consistent with the chosen 'split_fn' based on whether hyperparameter
+    optimization is necessary.
+
+    Parameters:
+    model_hparams (str): JSON string of model hyperparameters.
+    split_fn (str): Identifier for the data split function.
+    n_folds (Optional[int]): Number of folds for k-fold cross-validation, if applicable.
+
+    Raises:
+    ValueError: If there is inconsistency between hyperparameters and split function requirements.
+    argparse.ArgumentTypeError: If the hyperparameters are not in a valid JSON format or if the values are not
+                                valid scalars or specified distribution strings for hyperparameter optimization.
+    """
+    # First, validate the format of model hyperparameters
+    try:
+        hparams = json.loads(model_hparams)
+    except json.JSONDecodeError:
+        raise argparse.ArgumentTypeError("Invalid JSON string for hyperparameters.")
+
+    for key, value in hparams.items():
+        if isinstance(value, str):
+            if not re.match(r'^(uniform|loguniform|randint)\(\d+(\.\d+)?(e[+\-]?\d+)?, \d+(\.\d+)?(e[+\-]?\d+)?\)$', value):
+                raise argparse.ArgumentTypeError(
+                    f"Invalid value for hyperparameter {key}: must be a specific distribution string.")
+        elif not isinstance(value, (int, float)):
+            raise argparse.ArgumentTypeError(f"Invalid value for hyperparameter {key}: must be a scalar.")
+
+    # Check if hyperparameter optimization is necessary
+    optimization_needed = any(isinstance(value, str) for value in hparams.values())
+
+    # Conditions based on split function
+    if optimization_needed:
+        if split_fn == 'split_train_val_test' and n_folds is not None:
+            raise ValueError("For 'split_train_val_test', 'n_folds' must not be specified when doing hyperparameter optimization.")
+        elif split_fn == 'split_train_test' and n_folds is None:
+            raise ValueError("For 'split_train_test', 'n_folds' must be specified when doing hyperparameter optimization.")
+        else:
+            # Custom split function case, placeholder for further specifications
+            pass
+
+    else:  # Optimization is not needed
         if n_folds is not None:
-            raise ValueError("Number of folds should not be specified for TensorFlow/PyTorch models.")
+            raise ValueError("Argument n_folds should not be specified when hyperparameter optimization is not required.")
 
 
-def check_output_args(save_output: bool, output_data_dir: str, output_model_dir: str, output_report_dir: str, output_figures_dir: str) -> None:
+def check_output_args(save_output: bool, output_data_dir: str, output_model_dir: str, output_reports_dir: str, output_figures_dir: str) -> None:
     """
     Checks whether all output directories are specified when saving output is enabled.
 
@@ -172,35 +216,16 @@ def check_output_args(save_output: bool, output_data_dir: str, output_model_dir:
     save_output (bool): Flag indicating whether to save outputs.
     output_data_dir (str): Directory to save processed data.
     output_model_dir (str): Directory to save trained models.
-    output_report_dir (str): Directory to save evaluation reports.
+    output_reports_dir (str): Directory to save evaluation reports.
     output_figures_dir (str): Directory to save generated figures.
 
     Raises:
     ValueError: If `save_output` is True and any of the directory arguments is None.
     """
     if save_output:
-        output_dirs = [output_data_dir, output_model_dir, output_report_dir, output_figures_dir]
+        output_dirs = [output_data_dir, output_model_dir, output_reports_dir, output_figures_dir]
         if any(d is None for d in output_dirs):
             parser.error("All output directories must be specified when --save_output is used")
-
-
-def validate_hparams_format(param_string: str) -> str:
-    """Validate that the JSON string is well-formed and contains proper hyperparameters."""
-    try:
-        params = json.loads(param_string)
-    except json.JSONDecodeError:
-        raise argparse.ArgumentTypeError("Invalid JSON string for hyperparameters.")
-
-    for key, value in params.items():
-        if isinstance(value, str):
-            if not re.match(r'^(uniform|loguniform|randint)\(\d+(\.\d+)?(e[+\-]?\d+)?, \d+(\.\d+)?(e[+\-]?\d+)?\)$',
-                            value):
-                raise argparse.ArgumentTypeError(
-                    f"Invalid value for hyperparameter {key}: must be a specific distribution string.")
-        elif not isinstance(value, (int, float)):
-            raise argparse.ArgumentTypeError(f"Invalid value for hyperparameter {key}: must be a scalar.")
-
-    return param_string
 
 
 def load_fn(full_function_path: str):
@@ -317,8 +342,9 @@ def main(parsed_args: argparse.Namespace) -> None:
     """
     # Initialize logger
     if parsed_args.save_output:
-        ensure_dir_exists(parsed_args.output_report_dir)
-        log_fname = os.path.join(parsed_args.output_report_dir, f"log_{parsed_args.run_id}.log")
+        output_reports_dir = os.path.join(parsed_args.output_reports_dir, f"report_{parsed_args.run_id}")
+        ensure_dir_exists(output_reports_dir)
+        log_fname = os.path.join(output_reports_dir, f"log_{parsed_args.run_id}.log")
         logging.basicConfig(
             level=parsed_args.log_level.upper(),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -352,8 +378,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     additional_args = [parsed_args.n_folds,
                        parsed_args.stratified_kfold] if parsed_args.split_fn == 'split_train_test' else []
     split_data_fn_args = split_ratios + additional_args
-    X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y, parsed_args.random_seed,
-                                                                               *split_data_fn_args)
+    X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y, parsed_args.random_seed, *split_data_fn_args)
 
     # Distinguish between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS[parsed_args.model]:
@@ -370,7 +395,7 @@ def main(parsed_args: argparse.Namespace) -> None:
                                if k in valid_params and isinstance(v, str) and re.match(distr_pattern, v)}
         for k, v in param_distributions.items():
             if isinstance(v, str):
-                param_distributions[k] = string_to_distribution(v)
+                param_distributions[k] = string_to_distribution(v)  # TODO: check if param_distributions[k] is a string or a distr object
         optimization_needed = bool(param_distributions)
 
         # Either perform hyperparams optimization with refit=True OR just fit the model
@@ -401,11 +426,17 @@ def main(parsed_args: argparse.Namespace) -> None:
         Y_train_pred = model.predict(X_train.to_numpy())
 
     elif "tensorflow" in MODELS[parsed_args.model]:
-        pass
+        optimization_needed = True
+        Y_pred = None
+        cv_results_df = None
     elif "torch" in MODELS[parsed_args.model]:
-        pass
+        optimization_needed = True
+        Y_pred = None
+        cv_results_df = None
     else:
-        pass
+        optimization_needed = True
+        Y_pred = None
+        cv_results_df = None
 
     # Evaluate model predictions
     logger.info("Evaluating model predictions...")
@@ -426,7 +457,9 @@ def main(parsed_args: argparse.Namespace) -> None:
         ensure_dir_exists(model_summaries_dir)
         trained_models_dir = os.path.join(parsed_args.output_model_dir, "trained_models")
         ensure_dir_exists(trained_models_dir)
-        ensure_dir_exists(parsed_args.output_report_dir)
+        # output_reports_dir = os.path.join(parsed_args.output_reports_dir, f"report_{parsed_args.run_id}")  # Done before
+        # ensure_dir_exists(output_reports_dir)  # Done before
+        output_figures_dir = os.path.join(parsed_args.output_reports_dir, f"report_{parsed_args.run_id}")
         ensure_dir_exists(parsed_args.output_figures_dir)
 
         model_path = os.path.join(trained_models_dir, f"trained_model_{parsed_args.run_id}.pkl")
@@ -437,11 +470,11 @@ def main(parsed_args: argparse.Namespace) -> None:
             cv_results_path = os.path.join(model_summaries_dir, f"cv_results_{parsed_args.run_id}.csv")
             cv_results_df.to_csv(cv_results_path, index=False)
 
-        report_path = os.path.join(parsed_args.output_report_dir, f"scores_{parsed_args.run_id}.csv")
+        report_path = os.path.join(output_reports_dir, f"scores_{parsed_args.run_id}.csv")
         scores.to_csv(report_path, index=False)
 
         for fig_name, fig in figs.items():
-            fig_path = os.path.join(parsed_args.output_figures_dir, f"{fig_name}_{parsed_args.run_id}.png")
+            fig_path = os.path.join(output_figures_dir, f"{fig_name}_{parsed_args.run_id}.png")
             fig.savefig(fig_path)
             plt.close(fig)  # Close the figure after saving to free up memory
 
@@ -471,6 +504,7 @@ def main(parsed_args: argparse.Namespace) -> None:
             "final_hyperparameters": model.get_params() if hasattr(model, 'get_params') else "Not Applicable",
             "splitting_function": SPLITTING_FNS.get(parsed_args.split_fn, "Not Applicable"),
             "split_ratio": parsed_args.split_ratio,
+            "optimization_performed": optimization_needed,
             "n_folds": parsed_args.n_folds if parsed_args.n_folds is not None else "Not Applicable",
             "evaluation_function": EVALUATION_FNS.get(parsed_args.evaluation_fn, "Not Applicable"),
             "performance_metrics": scores.columns.tolist() if 'scores' in locals() else "Metrics not available",
@@ -479,7 +513,7 @@ def main(parsed_args: argparse.Namespace) -> None:
             "additional_information": "None",
             # Add any other information as needed
         }
-        with open(os.path.join(parsed_args.output_report_dir, f"experiment_details_{parsed_args.run_id}.txt"), "w") as file:
+        with open(os.path.join(output_reports_dir, f"experiment_details_{parsed_args.run_id}.txt"), "w") as file:
             for key, value in experiment_info.items():
                 file.write(f"{key}: {value}\n\n")
 
@@ -491,7 +525,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', required=True, help='Path to the data file')
     parser.add_argument('--data_loading_fn', required=True, help='Function identifier for loading data')
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
-    parser.add_argument('--model_hparams', help='JSON string of model hyperparameters', type=validate_hparams_format)
+    parser.add_argument('--model_hparams', help='JSON string of model hyperparameters')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
     parser.add_argument('--preprocessing_fn', required=True, choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
     parser.add_argument('--feature_extraction_fn', required=True, choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
@@ -506,13 +540,13 @@ if __name__ == "__main__":
     parser.add_argument('--save_output', action='store_true', help='Save outputs (data, models, reports, figures)')
     parser.add_argument('--output_data_dir', type=str, help='Directory to save processed data')
     parser.add_argument('--output_model_dir', type=str, help='Directory to save trained models')
-    parser.add_argument('--output_report_dir', type=str, help='Directory to save evaluation reports')
+    parser.add_argument('--output_reports_dir', type=str, help='Directory to save evaluation reports')
     parser.add_argument('--output_figures_dir', type=str, help='Directory to save generated figures')
     parsed_args = parser.parse_args()
 
     # Additional consistency check
-    check_split_args(parsed_args.split_fn, parsed_args.split_ratio, parsed_args.n_folds, parsed_args.model)
-    check_output_args(parsed_args.save_output, parsed_args.output_data_dir, parsed_args.output_model_dir,
-                      parsed_args.output_report_dir, parsed_args.output_figures_dir)
+    check_split_args(parsed_args.split_fn, parsed_args.split_ratio, parsed_args.model)
+    check_hparams_opt_args(parsed_args.model_hparams, parsed_args.split_fn, parsed_args.n_folds)
+    check_output_args(parsed_args.save_output, parsed_args.output_data_dir, parsed_args.output_model_dir, parsed_args.output_reports_dir, parsed_args.output_figures_dir)
 
     main(parsed_args)
