@@ -68,7 +68,6 @@ python analysis_exampledb.py
 
 import argparse
 import json
-import importlib
 import logging
 import matplotlib.pyplot as plt
 import multiprocessing
@@ -81,41 +80,55 @@ import sys
 
 from datetime import datetime
 from scipy.stats import loguniform, randint, uniform, rv_continuous, rv_discrete
+from sklearn.base import BaseEstimator
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
-from typing import Dict, Any, Union, Optional
+from sklearn.svm import SVC
+from typing import Dict, Any, Union, Optional, Type, Callable
+
+import src.models.custom_linear_regressor
+import src.data.load_exampledb
+import src.data.preprocess_exampledb
+import src.features.features_exampledb
+import src.data.split_train_val_test
+import src.data.split_train_test
+import src.data.split_exampledb
+import src.evaluation.evaluate_exampledb
 
 from src.utils.my_os import ensure_dir_exists
 
+
 # Dictionaries for mapping identifiers to strings representing sklearn or custom functions
-MODELS: Dict[str, str] = {
-    "sklearn_LinearRegression": "sklearn.linear_model.LinearRegression",
-    "sklearn_SVC": "sklearn.svm.SVC",
-    "sklearn_RandomForestRegressor": "sklearn.ensemble.RandomForestRegressor",
-    "mymodel": "models.mymodel",
+MODELS: Dict[str, Type[BaseEstimator]] = {
+    "sklearn_LinearRegression": LinearRegression,
+    "sklearn_SVC": SVC,
+    "sklearn_RandomForestRegressor": RandomForestRegressor,
+    "mymodel": src.models.custom_linear_regressor.CustomModel,
 }
-DATA_LOADING_FNS: Dict[str, str] = {
-    "load_exampledb": "src.data.load_exampledb.load_data",
+DATA_LOADING_FNS: Dict[str, Callable] = {
+    "load_exampledb": src.data.load_exampledb.load_data,
 }
-PREPROCESSING_FNS: Dict[str, str] = {
-    "preprocess_exampledb": "src.data.preprocess_exampledb.preprocess_data",
+PREPROCESSING_FNS: Dict[str, Callable] = {
+    "preprocess_exampledb": src.data.preprocess_exampledb.preprocess_data,
 }
-FEATURE_EXTRACTION_FNS: Dict[str, str] = {
-    "feature_exampledb": "src.features.features_exampledb.extract_features",
+FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
+    "feature_exampledb": src.features.features_exampledb.extract_features,
 }
-SPLITTING_FNS: Dict[str, str] = {
-    "split_train_val_test": "src.data.split_train_val_test.split_data",
-    "split_train_test": "src.data.split_train_test.split_data",
-    "split_exampledb": "src.data.split_exampledb.split_data",
+SPLITTING_FNS: Dict[str, Callable] = {
+    "split_train_val_test": src.data.split_train_val_test.split_data,
+    "split_train_test": src.data.split_train_test.split_data,
+    "split_exampledb": src.data.split_exampledb.split_data,
 }
-RAND_DISTR_FNS: Dict[str, str] = {
+RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'loguniform': loguniform,
     'randint': randint,
     'uniform': uniform,
 }
-EVALUATION_FNS: Dict[str, str] = {
-    "evaluate_exampledb": "src.evaluation.evaluate_exampledb.evaluate",
+EVALUATION_FNS: Dict[str, Callable] = {
+    "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
 }
 
 
@@ -138,7 +151,7 @@ def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
         raise ValueError("split_ratio must be a string of numbers separated by spaces.")
 
     # Validation based on the chosen model's library
-    model_module = MODELS.get(model, "")
+    model_module = MODELS.get(model).__module__
     if "sklearn" in model_module:
         if split_fn == "split_train_val_test":
             raise ValueError("Splitting function 'split_train_val_test' incompatible with sklearn models.")
@@ -228,16 +241,6 @@ def check_output_args(save_output: bool, output_data_dir: str, output_model_dir:
             parser.error("All output directories must be specified when --save_output is used")
 
 
-def load_fn(full_function_path: str):
-    """Dynamically loads a function using the full function path."""
-    module_name, function_name = full_function_path.rsplit('.', 1)
-    try:
-        module = importlib.import_module(module_name)
-        return getattr(module, function_name)
-    except (ImportError, AttributeError):
-        raise ImportError(f"Could not dynamically load the specified function: {full_function_path}")
-
-
 def init_reload_model(args: argparse.Namespace) -> Any:
     """
     Initializes a new model or reloads a pre-trained model based on the provided arguments.
@@ -260,7 +263,7 @@ def init_reload_model(args: argparse.Namespace) -> Any:
 
     model = None
     if args.model:
-        ModelClass = load_fn(MODELS.get(args.model))
+        ModelClass = MODELS.get(args.model)
         # Extract and filter valid scalar hyperparameters
         scalar_hparams = None
         if args.model_hparams:
@@ -324,6 +327,24 @@ def escape_quotes_in_curly_brackets(string: str) -> str:
     return string
 
 
+def get_function_full_name(func):
+    """
+    Retrieve the full name of a function, including its module path.
+
+    This function takes a function object as an argument and returns its complete name in the format 'module_name.function_name'.
+    If the argument is not a callable function (e.g., a string like "Not Applicable"), it returns the argument as it is.
+
+    Parameters:
+    func (Callable or str): The function object for which the full name is required, or a string representing a non-callable entity.
+
+    Returns:
+    str: The full name of the function including its module path if it's callable, or the original string if it's not callable.
+    """
+    if callable(func):
+        return f"{func.__module__}.{func.__name__}"
+    return func
+
+
 def main(parsed_args: argparse.Namespace) -> None:
     """
     Main function to execute the machine learning workflow.
@@ -355,13 +376,13 @@ def main(parsed_args: argparse.Namespace) -> None:
         logging.basicConfig(level=parsed_args.log_level.upper(), format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
 
-    # Select functions dynamically
+    # Determine required functions
     logger.info("Initializing functions and model...")
-    load_data_fn = load_fn(DATA_LOADING_FNS.get(parsed_args.data_loading_fn))
-    preprocess_fn = load_fn(PREPROCESSING_FNS.get(parsed_args.preprocessing_fn))
-    extract_features_fn = load_fn(FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn))
-    split_data_fn = load_fn(SPLITTING_FNS.get(parsed_args.split_fn))
-    evaluate_fn = load_fn(EVALUATION_FNS.get(parsed_args.evaluation_fn))
+    load_data_fn = DATA_LOADING_FNS.get(parsed_args.data_loading_fn)
+    preprocess_fn = PREPROCESSING_FNS.get(parsed_args.preprocessing_fn)
+    extract_features_fn = FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn)
+    split_data_fn = SPLITTING_FNS.get(parsed_args.split_fn)
+    evaluate_fn = EVALUATION_FNS.get(parsed_args.evaluation_fn)
 
     # Initialize model or reload existing one
     model = init_reload_model(parsed_args)
@@ -381,7 +402,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y, parsed_args.random_seed, *split_data_fn_args)
 
     # Distinguish between sklearn and pytorch/tensorflow pipeline
-    if "sklearn" in MODELS[parsed_args.model]:
+    if "sklearn" in MODELS.get(parsed_args.model).__module__:
         # Placeholder for any additional data transformation
         data_transformer = FunctionTransformer()
 
@@ -395,16 +416,15 @@ def main(parsed_args: argparse.Namespace) -> None:
                                if k in valid_params and isinstance(v, str) and re.match(distr_pattern, v)}
         for k, v in param_distributions.items():
             if isinstance(v, str):
-                param_distributions[k] = string_to_distribution(v)  # TODO: check if param_distributions[k] is a string or a distr object
+                param_distributions[k] = string_to_distribution(v)
         optimization_needed = bool(param_distributions)
 
         # Either perform hyperparams optimization with refit=True OR just fit the model
         if optimization_needed:
             n_samplings = 5
             logger.info(f"Optimizing model hyperparameters ({n_samplings} samplings * {len(cv_indices)} folds and fitting the model...")
-            n_cores = int(multiprocessing.cpu_count() / 2)
             search = RandomizedSearchCV(pipeline, param_distributions, n_iter=n_samplings, refit=True, cv=cv_indices,
-                                        random_state=parsed_args.random_seed, return_train_score=True, verbose=3, n_jobs=n_cores)  # return_train_score may slow down execution
+                                        random_state=parsed_args.random_seed, return_train_score=True, verbose=3)  # return_train_score may slow down the execution
             search = search.fit(np.squeeze(X_train.to_numpy()), np.squeeze(Y_train.to_numpy()))
             if hasattr(search, "cv_results_"):
                 cv_results_df = pd.DataFrame(search.cv_results_)
@@ -496,22 +516,21 @@ def main(parsed_args: argparse.Namespace) -> None:
             "run_id": parsed_args.run_id,
             "data_path": parsed_args.data_path,
             "dataset_shape": str(X.shape),
-            "preprocessing_function": PREPROCESSING_FNS.get(parsed_args.preprocessing_fn, "Not Applicable"),
-            "feature_extraction_function": FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn, "Not Applicable"),
-            "model_reused": parsed_args.reuse_model if parsed_args.reuse_model else "None",
+            "preprocessing_function": get_function_full_name(PREPROCESSING_FNS.get(parsed_args.preprocessing_fn, "Not Applicable")),
+            "feature_extraction_function": get_function_full_name(FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn, "Not Applicable")),
+            "model_reused": parsed_args.reuse_model if parsed_args.reuse_model else "False",
             "model_type": str(type(model)),
             "initial_hyperparameters": json.loads(parsed_args.model_hparams) if parsed_args.model_hparams else "None",
             "final_hyperparameters": model.get_params() if hasattr(model, 'get_params') else "Not Applicable",
-            "splitting_function": SPLITTING_FNS.get(parsed_args.split_fn, "Not Applicable"),
+            "splitting_function": get_function_full_name(SPLITTING_FNS.get(parsed_args.split_fn, "Not Applicable")),
             "split_ratio": parsed_args.split_ratio,
             "optimization_performed": optimization_needed,
             "n_folds": parsed_args.n_folds if parsed_args.n_folds is not None else "Not Applicable",
-            "evaluation_function": EVALUATION_FNS.get(parsed_args.evaluation_fn, "Not Applicable"),
-            "performance_metrics": scores.columns.tolist() if 'scores' in locals() else "Metrics not available",
+            "evaluation_function": get_function_full_name(EVALUATION_FNS.get(parsed_args.evaluation_fn, "Not Applicable")),
+            "performance_metrics": scores.index.tolist(),
             "random_seed": parsed_args.random_seed,
             "script_call": script_call,
-            "additional_information": "None",
-            # Add any other information as needed
+            "additional_information": "False",
         }
         with open(os.path.join(output_reports_dir, f"experiment_details_{parsed_args.run_id}.txt"), "w") as file:
             for key, value in experiment_info.items():
