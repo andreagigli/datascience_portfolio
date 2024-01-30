@@ -4,7 +4,7 @@ This script is designed for flexible machine learning workflows. It allows for d
 Example shell calls:
 
 1. Basic usage with required arguments:
-python analysis_template.py
+python analysis_exampledb.py
 --data_path ../../data/external/exampledb/california_housing.csv
 --data_loading_fn load_exampledb
 --model sklearn_RandomForestRegressor
@@ -23,7 +23,7 @@ python analysis_template.py
 --output_figures_dir ../../outputs/figures
 
 2. Usage with hyperparameters optimization:
-python analysis_template.py
+python analysis_exampledb.py
 --data_path ../../data/external/exampledb/california_housing.csv
 --data_loading_fn load_exampledb
 --model sklearn_RandomForestRegressor
@@ -43,7 +43,7 @@ python analysis_template.py
 --output_figures_dir ../../outputs/figures
 
 3. Usage with tensorflow model
-python analysis_template.py
+python analysis_exampledb.py
 --data_path ../../data/external/exampledb/california_housing.csv
 --data_loading_fn load_exampledb
 --model tensorflow_mynet
@@ -271,12 +271,11 @@ def string_to_distribution(value: str) -> Union[rv_continuous, rv_discrete]:
     specified input string. This can be either a continuous or a discrete distribution.
     """
     match = re.match(r'^(uniform|loguniform|randint)\(([^,]+), ([^)]+)\)$', value)
-    if match:
-        func_name, arg1, arg2 = match.groups()
-        arg1 = float(arg1)
-        arg2 = float(arg2)
-        value = RAND_DISTR_FNS[func_name](arg1, arg2)
-    return value
+    func_name, arg1, arg2 = match.groups()
+    arg1 = float(arg1)
+    arg2 = float(arg2)
+    distr_fn = RAND_DISTR_FNS[func_name](arg1, arg2)
+    return distr_fn
 
 
 def escape_quotes_in_curly_brackets(string: str) -> str:
