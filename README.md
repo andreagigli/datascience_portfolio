@@ -1,7 +1,4 @@
-# Custom Python package template for Data Science and ML projects
-
-## Description
-A portfolio of machine learning and data science projects.
+## Custom Python package for Data Science and ML projects
 
 ## Project Structure
 
