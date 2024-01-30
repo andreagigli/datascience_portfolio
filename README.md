@@ -1,12 +1,12 @@
 # Custom Python package template for Data Science and ML projects
 
 ## Description
-This template serves as a foundational structure for machine learning and data science projects. It provides an organized framework for managing various aspects of a project, including data storage, script management, model training, and evaluation, ensuring a modular and scalable approach to data science and machine learning development.
+A portfolio of machine learning and data science projects.
 
 ## Project Structure
 
 ```
-my_ml_package/
+portfolio_ML_datascience/
 │
 ├── data/                   # Data used in the project
 │   ├── raw/                # Unprocessed, original data files
@@ -57,23 +57,20 @@ my_ml_package/
 1. **Clone the project repository**:
 	- Use Git to clone the repository or download it manually from the project's webpage.
 	```
-	git clone https://github.com/andreagigli/my_ml_package.git
+	git clone https://github.com/andreagigli/portfolio_ML_datascience.git
 	```
-
-2. **Rename the package**
-	- The name of this template package is `my_ml_package`. Please replace it with the desired name in `setup.py` as well as in all the instructions below.
 
 
 ### Setting Up the Anaconda Environment
 
 1. **Create a new Anaconda environment**:
     ```
-    conda create -n my_ml_package_env python=3.10
+    conda create -n portfolio_ML_datascience_env python=3.10
     ```
 
 2. **Activate the environment**:
     ```
-    conda activate my_ml_package_env
+    conda activate portfolio_ML_datascience_env
     ```
 
 3. **Install necessary packages**:
@@ -91,7 +88,7 @@ my_ml_package/
 1. **Generate the `requirements.txt` file (optional)**:
     - If your project does not already have a `requirements.txt`, or if you want to update it, run `pipreqs`:
       ```
-	  cd my_ml_package
+	  cd portfolio_ML_datascience
       pipreqs .
       ```
 

@@ -7,8 +7,8 @@ with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
     install_requires = f.read().splitlines()
 
 setup(
-    name='my_project',
-    description='A short description of your project',
+    name='portfolio_ML_datascience',
+    description='Custom package for ML and data science',
     version='0.1.0',
     packages=find_packages(),  # Automatically finds and lists all packages in your project
     install_requires=install_requires,  # Gets the list of requirements from the requirements.txt file
