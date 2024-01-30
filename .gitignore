@@ -14,3 +14,4 @@ outputs/reports/*
 
 # But keep the california_housing.csv, explicitly un-ignored
 !data/external/exampledb/
+*.pyc
