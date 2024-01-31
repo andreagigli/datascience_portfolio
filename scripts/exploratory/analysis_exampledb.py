@@ -94,7 +94,7 @@ import src.data.preprocess_exampledb
 import src.features.features_exampledb
 import src.data.split_train_val_test
 import src.data.split_train_test
-import src.data.split_exampledb
+import src.data.split_passthrough
 import src.evaluation.evaluate_exampledb
 
 from src.utils.my_os import ensure_dir_exists
