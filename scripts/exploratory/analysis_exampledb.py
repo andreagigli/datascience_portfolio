@@ -167,6 +167,7 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'uniform': uniform,
 }
 EVALUATION_FNS: Dict[str, Callable] = {
+    "evaluate_passthrough": src.evaluation.evaluate_passthrough.evaluate,
     "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
 }
 
@@ -635,7 +636,7 @@ if __name__ == "__main__":
     parser.add_argument('--split_ratio', type=str, help='Ratio for splitting data')
     parser.add_argument('--n_folds', type=int, help='Number of folds for k-fold cross-validation')
     parser.add_argument('--stratified_kfold', action='store_true', help='Whether to perform stratified (for clf) or standard (for reg or clf) k-fold cross-validation')
-    parser.add_argument('--evaluation_fn', required=True, choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
+    parser.add_argument('--evaluation_fn', default='evaluate_passthrough', choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
     parser.add_argument('--log_level', type=str, default='INFO', help='Logging level (e.g., "INFO", "DEBUG")')
     parser.add_argument('--random_seed', type=int, default=None, help='Seed for random number generators for reproducibility')
     parser.add_argument('--run_id', type=str, default=datetime.now().strftime("%Y%m%d_%H%M%S"), help='Unique identifier for the run')
