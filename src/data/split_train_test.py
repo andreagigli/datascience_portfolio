@@ -15,20 +15,25 @@ def split_data(
     stratified: bool = False
 ) -> Tuple[DataFrame, DataFrame, Optional[DataFrame], Optional[DataFrame], DataFrame, DataFrame, Optional[List[Tuple[np.ndarray, np.ndarray]]]]:
     """
-    Splits the dataset into training and test sets and provides cross-validation indices for k-fold cross-validation.
+    Splits the dataset into training, validation (if applicable), and test sets, optionally providing cross-validation indices.
 
-    Parameters:
-    X (pd.DataFrame): DataFrame containing the features.
-    Y (pd.DataFrame): DataFrame containing the target variable.
-    n_splits (int): Number of folds for k-fold cross-validation.
-    random_seed (int): Random seed for reproducibility.
-    stratified (bool): Whether to perform stratified k-fold (only for classification).
+    Args:
+        X (DataFrame): DataFrame containing the features.
+        Y (DataFrame): DataFrame containing the target variable.
+        random_seed (Optional[int]): Seed for random number generator to ensure reproducibility.
+        train_prc (int): Percentage of the dataset to include in the training set.
+        test_prc (int): Percentage of the dataset to include in the test set.
+        n_folds (Optional[int]): Number of folds for k-fold cross-validation, if applicable.
+        stratified (bool): Whether to perform stratified k-fold cross-validation, relevant for classification tasks.
 
     Returns:
-    X_train, Y_train (pd.DataFrame): Training data.
-    X_test, Y_test (pd.DataFrame): Test data.
-    X_val, Y_val (None): Validation data is not explicitly returned in k-fold cross-validation. Only added for consistency across split_data functions.
-    cv_indices (list of tuples): Indices for k-fold cross-validation.
+        X_train (DataFrame): Training set features.
+        Y_train (DataFrame): Training set target variable.
+        X_val (Optional[DataFrame]): Validation set features, if `n_folds` is None (indicative of a hold-out validation set).
+        Y_val (Optional[DataFrame]): Validation set target variable, if `n_folds` is None.
+        X_test (DataFrame): Test set features.
+        Y_test (DataFrame): Test set target variable.
+        cv_indices (Optional[List[Tuple[np.ndarray, np.ndarray]]]): List of tuples containing train and validation indices for each fold, if `n_folds` is not None. Useful for cross-validation.
     """
     assert train_prc + test_prc == 100, "Sum of ratios must be 100"
 

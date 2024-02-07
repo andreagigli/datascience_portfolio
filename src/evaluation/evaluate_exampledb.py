@@ -13,14 +13,16 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 def calculate_metrics(Y_actual: np.ndarray, Y_predicted: np.ndarray) -> Dict[str, np.ndarray]:
     """
-    Calculate various regression metrics.
+    Calculates various regression metrics to evaluate the performance of a model.
 
-    Parameters:
-    Y_actual (array-like): Actual target values.
-    Y_predicted (array-like): Predicted target values.
+    Args:
+        Y_actual (np.ndarray): Actual target values.
+        Y_predicted (np.ndarray): Predicted target values by the model.
 
     Returns:
-    dict: A dictionary containing calculated metrics.
+        metrics (Dict[str, np.ndarray]): A dictionary containing the calculated metrics, including Mean Absolute Error (MAE),
+                                         Mean Squared Error (MSE), Root Mean Squared Error (RMSE), Normalized RMSE (NRMSE),
+                                         and R^2 Score (R2), each keyed by their respective names.
     """
     mae = mean_absolute_error(Y_actual, Y_predicted, multioutput="raw_values")
     mse = mean_squared_error(Y_actual, Y_predicted, multioutput="raw_values")
@@ -40,20 +42,21 @@ def evaluate(
     Y_train_pred: Optional[np.ndarray] = None
 ) -> Tuple[DataFrame, Dict[str, Figure]]:
     """
-    Evaluates the performance of a regression model and generates plots of actual vs. predicted values
-    for both test and training data.
+    Evaluates a regression model's performance, comparing actual vs. predicted values, and generates plots for visualization.
 
-    Parameters:
-    Y (array-like): Actual target values.
-    Y_pred (array-like): Predicted target values from the model.
-    model: Trained model used for prediction.
-    target_name (list): List containing the name of the target variable.
-    Y_train (array-like, optional): Actual target values of the train set.
-    Y_train_pred (array-like, optional): Predicted target values of the train set.
+    Args:
+        Y (np.ndarray): Actual target values for the test set.
+        Y_pred (np.ndarray): Predicted target values for the test set.
+        model (BaseEstimator): The regression model used for predictions.
+        target_name (List[str]): List containing the name(s) of the target variable(s).
+        Y_train (Optional[np.ndarray]): Actual target values for the training set, if available.
+        Y_train_pred (Optional[np.ndarray]): Predicted target values for the training set, if available.
 
     Returns:
-    scores (pd.DataFrame): DataFrame containing evaluation metrics.
-    figs (dict): Dictionary containing generated figures.
+        scores (DataFrame): A DataFrame containing evaluation metrics such as MAE, MSE, RMSE, NRMSE, and R2,
+                            for both test and optionally for the training dataset.
+        figs (Dict[str, Figure]): A dictionary of matplotlib Figures, including scatter plots of actual vs.
+                                  predicted values for the test set and, if provided, for the training set.
     """
 
     # Compute metrics
