@@ -1,7 +1,7 @@
 from sklearn.model_selection import train_test_split
 
 
-def split_data(X, Y, random_seed=None, train_prc=75, val_prc=15, test_prc=15):
+def split_data(X, Y, random_seed=None, train_prc=70, val_prc=15, test_prc=15):
     """
     Splits the dataset into training, validation, and test sets.
 

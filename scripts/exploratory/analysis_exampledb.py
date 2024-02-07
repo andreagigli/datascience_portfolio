@@ -3,14 +3,14 @@ This script is designed for flexible machine learning workflows. It allows for d
 
 Example shell calls:
 
-1. Basic usage with required arguments:
+1. Basic usage with required arguments (no hypopt, split train-test)
 python analysis_exampledb.py
 --data_path ../../data/external/exampledb/california_housing.csv
 --data_loading_fn load_exampledb
 --model sklearn_RandomForestRegressor
 --model_hparams "{\"n_estimators\": 100, \"max_depth\": 10}"
---preprocessing_fn preprocess_exampledb
---feature_extraction_fn feature_exampledb
+--preprocessing_fn preprocess_passthrough
+--feature_extraction_fn features_passthrough
 --split_fn split_train_test
 --split_ratio "80 20"
 --evaluation_fn evaluate_exampledb
@@ -22,14 +22,34 @@ python analysis_exampledb.py
 --output_reports_dir ../../outputs/reports
 --output_figures_dir ../../outputs/figures
 
-2. Usage with hyperparameters optimization:
+2. Basic usage with minimal function call (no hypopt, split train-test)
+python analysis_exampledb.py
+--data_path ../../data/external/exampledb/california_housing.csv
+--data_loading_fn load_exampledb
+--model sklearn_RandomForestRegressor
+--split_fn split_train_test
+--split_ratio "80 20"
+--evaluation_fn evaluate_exampledb
+--log_level INFO
+--random_seed 0
+
+3. Basic usage with minimal function call (no hypopt, assuming loaded data is already split)
+python analysis_exampledb.py
+--data_path ../../data/external/exampledb/california_housing.csv
+--data_loading_fn load_exampledb
+--model sklearn_RandomForestRegressor
+--evaluation_fn evaluate_exampledb
+--log_level INFO
+--random_seed 0
+
+4. Usage with hyperparameters optimization (hypopt, split train-test + kfold)
 python analysis_exampledb.py
 --data_path ../../data/external/exampledb/california_housing.csv
 --data_loading_fn load_exampledb
 --model sklearn_RandomForestRegressor
 --model_hparams "{\"n_estimators\": \"randint(10, 100)\", \"max_depth\": 5}"
---preprocessing_fn preprocess_exampledb
---feature_extraction_fn feature_exampledb
+--preprocessing_fn preprocess_passthrough
+--feature_extraction_fn features_passthrough
 --split_fn split_train_test
 --split_ratio "80 20"
 --n_folds 3
@@ -42,13 +62,14 @@ python analysis_exampledb.py
 --output_reports_dir ../../outputs/reports
 --output_figures_dir ../../outputs/figures
 
-3. Usage with tensorflow model
+5. Usage with hyperparameters optimization (hypopt, split train-val-test)
 python analysis_exampledb.py
 --data_path ../../data/external/exampledb/california_housing.csv
 --data_loading_fn load_exampledb
---model tensorflow_mynet
---preprocessing_fn preprocess_exampledb
---feature_extraction_fn feature_exampledb
+--model sklearn_RandomForestRegressor
+--model_hparams "{\"n_estimators\": \"randint(10, 100)\", \"max_depth\": 5}"
+--preprocessing_fn preprocess_passthrough
+--feature_extraction_fn features_passthrough
 --split_fn split_train_val_test
 --split_ratio "70 15 15"
 --evaluation_fn evaluate_exampledb
@@ -60,9 +81,27 @@ python analysis_exampledb.py
 --output_reports_dir ../../outputs/reports
 --output_figures_dir ../../outputs/figures
 
-3. Using a pre-trained model: ...
+6. Usage with tensorflow model
+python analysis_exampledb.py
+--data_path ../../data/external/exampledb/california_housing.csv
+--data_loading_fn load_exampledb
+--model tensorflow_mynet
+--preprocessing_fn preprocess_passthrough
+--feature_extraction_fn features_passthrough
+--split_fn split_train_val_test
+--split_ratio "70 15 15"
+--evaluation_fn evaluate_exampledb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ../../data/processed
+--output_model_dir ../../models
+--output_reports_dir ../../outputs/reports
+--output_figures_dir ../../outputs/figures
 
-4. Custom data splitting function: ...
+7. Using a pre-trained model: ...
+
+8. Custom data splitting function: ...
 
 """
 
@@ -90,12 +129,13 @@ from typing import Dict, Any, Union, Optional, Type, Callable
 
 import src.models.custom_linear_regressor
 import src.data.load_exampledb
-import src.data.preprocess_exampledb
-import src.features.features_exampledb
+import src.data.preprocess_passthrough
+import src.features.features_passthrough
 import src.data.split_train_val_test
 import src.data.split_train_test
-import src.data.split_exampledb
+import src.data.split_passthrough
 import src.evaluation.evaluate_exampledb
+from src.optimization.custom_sk_validators import PredefinedSplit
 
 from src.utils.my_os import ensure_dir_exists
 
@@ -111,15 +151,15 @@ DATA_LOADING_FNS: Dict[str, Callable] = {
     "load_exampledb": src.data.load_exampledb.load_data,
 }
 PREPROCESSING_FNS: Dict[str, Callable] = {
-    "preprocess_exampledb": src.data.preprocess_exampledb.preprocess_data,
+    "preprocess_passthrough": src.data.preprocess_passthrough.preprocess_data,
 }
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
-    "feature_exampledb": src.features.features_exampledb.extract_features,
+    "features_passthrough": src.features.features_passthrough.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
     "split_train_val_test": src.data.split_train_val_test.split_data,
     "split_train_test": src.data.split_train_test.split_data,
-    "split_exampledb": src.data.split_exampledb.split_data,
+    "split_passthrough": src.data.split_passthrough.split_data,
 }
 RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'loguniform': loguniform,
@@ -127,50 +167,57 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'uniform': uniform,
 }
 EVALUATION_FNS: Dict[str, Callable] = {
+    "evaluate_passthrough": src.evaluation.evaluate_passthrough.evaluate,
     "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
 }
 
 
 def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
-    """
+    """"
     Check the consistency and validity of split function arguments.
 
     Parameters:
     split_fn (str): The identifier for the data splitting function.
     split_ratio (str): A string representing the ratio for splitting data.
-    n_folds (int): Number of folds for k-fold cross-validation.
+    model (str): Model identifier.
 
     Raises:
     ValueError: If any inconsistency is found in the arguments.
     """
-    # Check that split_ratio is a string of numbers separated by spaces
-    try:
-        ratios = [float(num) for num in split_ratio.split()]
-    except ValueError:
-        raise ValueError("split_ratio must be a string of numbers separated by spaces.")
+    if split_fn not in SPLITTING_FNS.keys():
+        raise ValueError(f"split_fn must be one among {SPLITTING_FNS.keys()}.")
+
+    if (split_fn == "split_train_test" or split_fn == "split_train_val_test") and split_ratio is None:
+        raise ValueError("split_ratio must be provided for splitting functions 'split_train_test' and 'split_train_val_test'.")
+
+    if split_ratio is not None:
+        # Check that split ratio is a string of numbers separated by spaces
+        try:
+            ratios = [float(num) for num in split_ratio.split()]
+        except ValueError:
+            raise ValueError("split_ratio must be a string of numbers separated by spaces.")
+        # Check that the correct number of split_ratio(s) is provided for the desired split_fn
+        if split_fn == "split_train_test" and len(ratios) != 2:
+            raise ValueError("Two numbers should be given as split_ratios for splitting function 'split_train_test'.")
+        elif split_fn == "split_train_val_test" and len(ratios) != 3:
+            raise ValueError("Three numbers should be given as split_ratios for splitting function 'split_train_val_test'.")
 
     # Validation based on the chosen model's library
     model_module = MODELS.get(model).__module__
-    if "sklearn" in model_module:
-        if split_fn == "split_train_val_test":
-            raise ValueError("Splitting function 'split_train_val_test' incompatible with sklearn models.")
-        if len(ratios) != 2:
-            raise ValueError("Split ratio for sklearn models must contain exactly two numbers.")
-        # if not (n_folds and isinstance(n_folds, int)):
-        #     raise ValueError("Number of folds for sklearn models must be an integer.")
+    # if "sklearn" in model_module:
+    #     if split_fn == "split_train_val_test":
+    #         raise ValueError("Splitting function 'split_train_val_test' incompatible with sklearn models.")
+    #     if len(ratios) != 2:
+    #         raise ValueError("Split ratio for sklearn models must contain exactly two numbers.")
 
-    elif "tensorflow" in model_module or "torch" in model_module:
+    if "tensorflow" in model_module or "torch" in model_module:
         if split_fn == "split_train_test":
             raise ValueError("Splitting function 'split_train_test' incompatible with sklearn models.")
         if len(ratios) != 3:
             raise ValueError("Split ratio for TensorFlow/PyTorch models must contain exactly three numbers.")
-        # if n_folds is not None:
-        #     raise ValueError("Number of folds should not be specified for TensorFlow/PyTorch models.")
-    else:
-        raise ValueError("Unknown model type.")
 
 
-def check_hparams_opt_args(model_hparams: str, split_fn: str, n_folds: Optional[int]) -> None:
+def check_hparams_opt_args(model_hparams: Optional[str], split_fn: str, n_folds: Optional[int]) -> None:
     """
     Validates the format of model hyperparameters and checks their consistency with the data split function.
     This function first checks if the model hyperparameters are in the correct JSON format and then validates
@@ -189,18 +236,21 @@ def check_hparams_opt_args(model_hparams: str, split_fn: str, n_folds: Optional[
                                 valid scalars or specified distribution strings for hyperparameter optimization.
     """
     # First, validate the format of model hyperparameters
-    try:
-        hparams = json.loads(model_hparams)
-    except json.JSONDecodeError:
-        raise argparse.ArgumentTypeError("Invalid JSON string for hyperparameters.")
 
-    for key, value in hparams.items():
-        if isinstance(value, str):
-            if not re.match(r'^(uniform|loguniform|randint)\(\d+(\.\d+)?(e[+\-]?\d+)?, \d+(\.\d+)?(e[+\-]?\d+)?\)$', value):
-                raise argparse.ArgumentTypeError(
-                    f"Invalid value for hyperparameter {key}: must be a specific distribution string.")
-        elif not isinstance(value, (int, float)):
-            raise argparse.ArgumentTypeError(f"Invalid value for hyperparameter {key}: must be a scalar.")
+    if model_hparams is None:
+        hparams = {}
+    else:
+        try:
+            hparams = json.loads(model_hparams)
+        except json.JSONDecodeError:
+            raise argparse.ArgumentTypeError("Invalid JSON string for hyperparameters.")
+        for key, value in hparams.items():
+            if isinstance(value, str):
+                if not re.match(r'^(uniform|loguniform|randint)\(\d+(\.\d+)?(e[+\-]?\d+)?, \d+(\.\d+)?(e[+\-]?\d+)?\)$', value):
+                    raise argparse.ArgumentTypeError(
+                        f"Invalid value for hyperparameter {key}: must be a specific distribution string.")
+            elif not isinstance(value, (int, float)):
+                raise argparse.ArgumentTypeError(f"Invalid value for hyperparameter {key}: must be a scalar.")
 
     # Check if hyperparameter optimization is necessary
     optimization_needed = any(isinstance(value, str) for value in hparams.values())
@@ -208,7 +258,7 @@ def check_hparams_opt_args(model_hparams: str, split_fn: str, n_folds: Optional[
     # Conditions based on split function
     if optimization_needed:
         if split_fn == 'split_train_val_test' and n_folds is not None:
-            raise ValueError("For 'split_train_val_test', 'n_folds' must not be specified when doing hyperparameter optimization.")
+            raise ValueError("'n_folds' should not be specified for splitting function 'split_train_val_test'.")
         elif split_fn == 'split_train_test' and n_folds is None:
             raise ValueError("For 'split_train_test', 'n_folds' must be specified when doing hyperparameter optimization.")
         else:
@@ -264,14 +314,16 @@ def init_reload_model(args: argparse.Namespace) -> Any:
     if args.model:
         ModelClass = MODELS.get(args.model)
         # Extract and filter valid scalar hyperparameters
-        scalar_hparams = None
-        if args.model_hparams:
+        if args.model_hparams is None:
+            model = ModelClass()
+        else:
             params = json.loads(args.model_hparams)
             valid_params = ModelClass().get_params().keys()
             scalar_hparams = {k: v for k, v in params.items()
                               if k in valid_params and isinstance(v, (int, float))}
-        model = ModelClass(**scalar_hparams)
-    elif args.reuse_model:  # reload serialized model
+            model = ModelClass(**scalar_hparams)
+
+    else:  # reload serialized model (args.reuse_model is set)
         try:
             with open(args.reuse_model, 'rb') as file:
                 model = pickle.load(file)
@@ -394,12 +446,16 @@ def main(parsed_args: argparse.Namespace) -> None:
     X, Y = extract_features_fn(X, Y)
 
     # Split data
-    logger.info("Computing data splits...")
-    split_ratios = [float(el) for el in parsed_args.split_ratio.split()]
-    additional_args = [parsed_args.n_folds,
-                       parsed_args.stratified_kfold] if parsed_args.split_fn == 'split_train_test' else []
-    split_data_fn_args = split_ratios + additional_args
-    X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y, parsed_args.random_seed, *split_data_fn_args)
+    if parsed_args.split_fn != "split_passthrough":
+        logger.info("Computing data splits...")
+        split_ratios = [float(el) for el in parsed_args.split_ratio.split()]
+        additional_args = [parsed_args.n_folds,
+                           parsed_args.stratified_kfold] if parsed_args.split_fn == 'split_train_test' else []
+        split_data_fn_args = split_ratios + additional_args
+        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y, parsed_args.random_seed, *split_data_fn_args)
+    else:
+        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
+        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices)  # This is correct as split_data_fn would be split_passthrough
 
     # Distinguish between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
@@ -410,22 +466,45 @@ def main(parsed_args: argparse.Namespace) -> None:
         pipeline = Pipeline([('transformer', data_transformer), ('model', model)])
 
         # Set up hyperparams optimization if there is any valid hyperparameter associated with a distribution string
-        valid_params = model.get_params().keys()
-        distr_pattern = r'^(uniform|loguniform|randint)\(\d+(\.\d+)?, \d+(\.\d+)?\)$'
-        param_distributions = {f"model__{k}": v for k, v in json.loads(parsed_args.model_hparams).items()
-                               if k in valid_params and isinstance(v, str) and re.match(distr_pattern, v)}
-        for k, v in param_distributions.items():
-            if isinstance(v, str):
-                param_distributions[k] = string_to_distribution(v)
-        optimization_needed = bool(param_distributions)
+        if parsed_args.model_hparams is None:
+            optimization_needed = False
+        else:
+            valid_params = model.get_params().keys()
+            distr_pattern = r'^(uniform|loguniform|randint)\(\d+(\.\d+)?, \d+(\.\d+)?\)$'
+            param_distributions = {f"model__{k}": v for k, v in json.loads(parsed_args.model_hparams).items()
+                                   if k in valid_params and isinstance(v, str) and re.match(distr_pattern, v)}
+            for k, v in param_distributions.items():
+                if isinstance(v, str):
+                    param_distributions[k] = string_to_distribution(v)
+            optimization_needed = bool(param_distributions)
 
         # Either perform hyperparams optimization with refit=True OR just fit the model
         if optimization_needed:
+            # Determine whether to perform k-fold validation or rely on precomputed val set
+            if X_val is None and Y_val is None and cv_indices is not None:
+                cv = cv_indices
+                n_folds = len(cv_indices)
+                X_tmp = X_train
+                Y_tmp = Y_train
+            elif X_val is not None and Y_val is not None and cv_indices is None:
+                n_folds = 1
+                val_fold = [0] * len(X_train) + [1] * len(X_val)
+                X_tmp = np.concatenate([X_train, X_val])
+                Y_tmp = np.concatenate([Y_train, Y_val])
+                cv = PredefinedSplit(test_fold=val_fold)
+            else:
+                raise ValueError("Only one is expected to be not None between cv_indices and (X_val, Y_val).")
+
             n_samplings = 5
-            logger.info(f"Optimizing model hyperparameters ({n_samplings} samplings * {len(cv_indices)} folds and fitting the model...")
-            search = RandomizedSearchCV(pipeline, param_distributions, n_iter=n_samplings, refit=True, cv=cv_indices,
-                                        random_state=parsed_args.random_seed, return_train_score=True, verbose=3)  # return_train_score may slow down the execution
-            search = search.fit(np.squeeze(X_train.to_numpy()), np.squeeze(Y_train.to_numpy()))
+            logger.info(f"Optimizing model hyperparameters ({n_samplings} samplings * {n_folds} folds and fitting the model...")
+            search = RandomizedSearchCV(pipeline,
+                                        param_distributions,
+                                        n_iter=n_samplings,
+                                        refit=True, cv=cv,
+                                        random_state=parsed_args.random_seed,
+                                        return_train_score=True,
+                                        verbose=3)  # return_train_score may slow down the execution
+            search = search.fit(np.squeeze(np.asarray(X_tmp)), np.squeeze(np.asarray(Y_tmp)))
             if hasattr(search, "cv_results_"):
                 cv_results_df = pd.DataFrame(search.cv_results_)
                 float_columns = cv_results_df.select_dtypes(include=['float']).columns
@@ -549,15 +628,15 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', required=True, help='Path to the data file')
     parser.add_argument('--data_loading_fn', required=True, help='Function identifier for loading data')
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
-    parser.add_argument('--model_hparams', help='JSON string of model hyperparameters')
+    parser.add_argument('--model_hparams', default=None, help='JSON string of model hyperparameters')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
-    parser.add_argument('--preprocessing_fn', required=True, choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
-    parser.add_argument('--feature_extraction_fn', required=True, choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
-    parser.add_argument('--split_fn', required=True, choices=SPLITTING_FNS.keys(), help='Identifier for data split function')
-    parser.add_argument('--split_ratio', required=True, type=str, help='Ratio for splitting data')
+    parser.add_argument('--preprocessing_fn', default='preprocess_passthrough', choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
+    parser.add_argument('--feature_extraction_fn', default='features_passthrough', choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
+    parser.add_argument('--split_fn', default='split_passthrough', help='Identifier for data split function')
+    parser.add_argument('--split_ratio', type=str, help='Ratio for splitting data')
     parser.add_argument('--n_folds', type=int, help='Number of folds for k-fold cross-validation')
-    parser.add_argument('--stratified_kfold', type=bool, default=False, help='Whether to perform stratified (for clf) or standard (for reg or clf) k-fold cross-validation')
-    parser.add_argument('--evaluation_fn', required=True, choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
+    parser.add_argument('--stratified_kfold', action='store_true', help='Whether to perform stratified (for clf) or standard (for reg or clf) k-fold cross-validation')
+    parser.add_argument('--evaluation_fn', default='evaluate_passthrough', choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
     parser.add_argument('--log_level', type=str, default='INFO', help='Logging level (e.g., "INFO", "DEBUG")')
     parser.add_argument('--random_seed', type=int, default=None, help='Seed for random number generators for reproducibility')
     parser.add_argument('--run_id', type=str, default=datetime.now().strftime("%Y%m%d_%H%M%S"), help='Unique identifier for the run')
