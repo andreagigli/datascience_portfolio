@@ -5,24 +5,28 @@ from sklearn.model_selection import BaseCrossValidator
 
 class PredefinedSplit(BaseCrossValidator):
     """
-    Custom cross-validator that uses predefined training and validation sets.
+        Custom cross-validator that uses predefined training and validation sets.
 
-    Parameters:
-    test_fold : array-like
-        An array that specifies the split of the data into training and 
-        validation set. It should contain 0 for samples that are part of the
-        training set, and 1 for samples that are part of the validation set.
+        This cross-validator is useful for scenarios where the training and validation sets are explicitly
+        defined beforehand, rather than randomly split. It's particularly handy when you have a dataset that
+        requires a specific split that cannot be randomly generated due to constraints like time-series data.
 
-    Example:
-    val_fold = [0] * len(train_data) + [1] * len(validation_data)
-    X_combined = np.concatenate([train_data, validation_data])
-    y_combined = np.concatenate([train_labels, validation_labels])
-    ps = PredefinedSplit(test_fold=val_fold)
-    estimator = RandomForestClassifier()
-    param_distrib = {'n_estimators': randint(10, 100), 'max_depth': randint(10, 20)}
-    search = RandomizedSearchCV(estimator, param_distrib, n_iter=5, cv=ps)
-    search.fit(X_combined, y_combined)
-    """
+        Parameters:
+            test_fold (np.ndarray): An array where 0 indicates a sample belongs to the training set, and 1 indicates
+                                    a sample belongs to the validation set.
+
+        Example:
+            The `PredefinedSplit` can be used as the `cv` parameter in grid search or cross-validation functions
+            of scikit-learn, allowing for custom splits in model selection and evaluation processes.
+            val_fold = [0] * len(train_data) + [1] * len(validation_data)
+            X_combined = np.concatenate([train_data, validation_data])
+            y_combined = np.concatenate([train_labels, validation_labels])
+            ps = PredefinedSplit(test_fold=val_fold)
+            estimator = RandomForestClassifier()
+            param_distrib = {'n_estimators': randint(10, 100), 'max_depth': randint(10, 20)}
+            search = RandomizedSearchCV(estimator, param_distrib, n_iter=5, cv=ps)
+            search.fit(X_combined, y_combined)
+        """
     def __init__(self, test_fold):
         self.test_fold = test_fold
 

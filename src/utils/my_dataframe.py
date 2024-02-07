@@ -3,13 +3,18 @@ import pandas as pd
 
 def downcast(df):
     """
-    Downcast the data types of a Pandas DataFrame to more memory-efficient types.
+    Optimizes a DataFrame's memory usage by downcasting numeric types and converting strings to categories where appropriate.
 
-    Parameters:
-    - df: pandas.DataFrame to downcast.
+    This function iterates over each column in the DataFrame and downcasts numeric types to the most
+    memory-efficient type possible. For object types, it attempts to convert strings to categories if
+    the number of unique values is less than 50% of the total values in the column. Dates are converted
+    to datetime if a column is named 'date'.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to optimize.
 
     Returns:
-    - df: The same DataFrame with downcast data types for numeric and object columns.
+        pd.DataFrame: The optimized DataFrame with downcasted data types.
     """
     # Iterate over each column in the DataFrame
     for col in df.columns:

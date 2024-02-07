@@ -134,7 +134,9 @@ import src.features.features_passthrough
 import src.data.split_train_val_test
 import src.data.split_train_test
 import src.data.split_passthrough
+import src.eda.eda_passthrough
 import src.evaluation.evaluate_exampledb
+import src.evaluation.evaluate_passthrough
 from src.optimization.custom_sk_validators import PredefinedSplit
 
 from src.utils.my_os import ensure_dir_exists
@@ -152,6 +154,9 @@ DATA_LOADING_FNS: Dict[str, Callable] = {
 }
 PREPROCESSING_FNS: Dict[str, Callable] = {
     "preprocess_passthrough": src.data.preprocess_passthrough.preprocess_data,
+}
+EDA_FNS: Dict[str, Callable] = {
+    "eda_passthrough": src.eda.eda_passthrough.eda,
 }
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_passthrough": src.features.features_passthrough.extract_features,
@@ -173,16 +178,20 @@ EVALUATION_FNS: Dict[str, Callable] = {
 
 
 def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
-    """"
-    Check the consistency and validity of split function arguments.
+    """
+    Checks the consistency and validity of split function arguments.
 
-    Parameters:
-    split_fn (str): The identifier for the data splitting function.
-    split_ratio (str): A string representing the ratio for splitting data.
-    model (str): Model identifier.
+    Validates the provided `split_fn` and `split_ratio` arguments for data splitting and ensures they are compatible
+    with the selected `model`. It raises an error if there are inconsistencies or if the arguments do not meet
+    the expectations for the specified data splitting function.
+
+    Args:
+        split_fn (str): The identifier for the data splitting function.
+        split_ratio (str): A string representing the ratio for splitting data.
+        model (str): Model identifier.
 
     Raises:
-    ValueError: If any inconsistency is found in the arguments.
+        ValueError: If any inconsistency is found in the arguments.
     """
     if split_fn not in SPLITTING_FNS.keys():
         raise ValueError(f"split_fn must be one among {SPLITTING_FNS.keys()}.")
@@ -219,21 +228,21 @@ def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
 
 def check_hparams_opt_args(model_hparams: Optional[str], split_fn: str, n_folds: Optional[int]) -> None:
     """
-    Validates the format of model hyperparameters and checks their consistency with the data split function.
-    This function first checks if the model hyperparameters are in the correct JSON format and then validates
-    whether the values are appropriate (scalar or specified distribution strings for hyperparameter optimization).
-    It also checks if the 'n_folds' argument is consistent with the chosen 'split_fn' based on whether hyperparameter
-    optimization is necessary.
+    Validates the format of model hyperparameters and their consistency with the data split function.
 
-    Parameters:
-    model_hparams (str): JSON string of model hyperparameters.
-    split_fn (str): Identifier for the data split function.
-    n_folds (Optional[int]): Number of folds for k-fold cross-validation, if applicable.
+    This function ensures that the model hyperparameters are in the correct JSON format and checks
+    their compatibility with the specified data splitting function, particularly in the context of
+    hyperparameter optimization. Raises errors for any inconsistencies or invalid formats.
+
+    Args:
+        model_hparams (str, optional): JSON string of model hyperparameters.
+        split_fn (str): Identifier for the data split function.
+        n_folds (int, optional): Number of folds for k-fold cross-validation, if applicable.
 
     Raises:
-    ValueError: If there is inconsistency between hyperparameters and split function requirements.
-    argparse.ArgumentTypeError: If the hyperparameters are not in a valid JSON format or if the values are not
-                                valid scalars or specified distribution strings for hyperparameter optimization.
+        ValueError: If there is an inconsistency between hyperparameters and split function requirements.
+        argparse.ArgumentTypeError: If the hyperparameters are not in a valid JSON format or if the values
+                                    are not valid scalars or specified distribution strings for hyperparameter optimization.
     """
     # First, validate the format of model hyperparameters
 
@@ -272,17 +281,20 @@ def check_hparams_opt_args(model_hparams: Optional[str], split_fn: str, n_folds:
 
 def check_output_args(save_output: bool, output_data_dir: str, output_model_dir: str, output_reports_dir: str, output_figures_dir: str) -> None:
     """
-    Checks whether all output directories are specified when saving output is enabled.
+    Checks the specification of output directories when saving output is enabled.
 
-    Parameters:
-    save_output (bool): Flag indicating whether to save outputs.
-    output_data_dir (str): Directory to save processed data.
-    output_model_dir (str): Directory to save trained models.
-    output_reports_dir (str): Directory to save evaluation reports.
-    output_figures_dir (str): Directory to save generated figures.
+    Ensures all required output directories are specified if the `save_output` flag is True.
+    Raises an error if any of the directory paths are not provided.
+
+    Args:
+        save_output (bool): Flag indicating whether to save outputs.
+        output_data_dir (str): Directory to save processed data.
+        output_model_dir (str): Directory to save trained models.
+        output_reports_dir (str): Directory to save evaluation reports.
+        output_figures_dir (str): Directory to save generated figures.
 
     Raises:
-    ValueError: If `save_output` is True and any of the directory arguments is None.
+        ValueError: If `save_output` is True and any of the directory arguments is None.
     """
     if save_output:
         output_dirs = [output_data_dir, output_model_dir, output_reports_dir, output_figures_dir]
@@ -292,20 +304,20 @@ def check_output_args(save_output: bool, output_data_dir: str, output_model_dir:
 
 def init_reload_model(args: argparse.Namespace) -> Any:
     """
-    Initializes a new model or reloads a pre-trained model based on the provided arguments.
+    Initializes or reloads a model based on the provided command-line arguments.
 
-    This function either creates a new model instance using the specified model identifier
-    and hyperparameters or loads a model from a given file path.
+    This function creates a new model instance using the specified model identifier and hyperparameters,
+    or loads a model from a specified file path. It handles the logic for deciding whether to initialize
+    a new model or reload an existing one.
 
-    Parameters:
-    args (argparse.Namespace): The namespace object containing command-line arguments.
+    Args:
+        args (argparse.Namespace): The namespace object containing command-line arguments.
 
     Returns:
-    Any: The initialized or reloaded model object.
+        Any: The initialized or reloaded model object.
 
     Raises:
-    ValueError: If both a new model and a model to reuse are specified.
-    FileNotFoundError, pickle.UnpicklingError: If the model file for reuse is not found or cannot be loaded.
+        ValueError: If both a new model and a model to reuse are specified, or if the model file cannot be found or loaded.
     """
     if args.reuse_model and args.model:
         raise ValueError("Specify either a model to train or a model to reuse, not both.")
@@ -334,20 +346,20 @@ def init_reload_model(args: argparse.Namespace) -> Any:
 
 def string_to_distribution(value: str) -> Union[rv_continuous, rv_discrete]:
     """
-    Converts a validated string representation of a distribution into a SciPy distribution object.
+    Converts a string representation of a distribution into a SciPy distribution object.
 
-    This function assumes that the input string is already validated to match the pattern
-    'distribution_name(arg1, arg2)', where 'distribution_name' is one of 'uniform',
-    'loguniform', or 'randint', and 'arg1' and 'arg2' are numerical arguments for the
-    distribution constructor. This validation is performed elsewhere in the code prior
-    to calling this function.
+    This function takes a validated string that represents a distribution (e.g., "uniform(0, 1)")
+    and converts it into the corresponding SciPy distribution object. The string must follow the
+    pattern 'distribution_name(arg1, arg2)', where 'distribution_name' is one of 'uniform',
+    'loguniform', or 'randint', and 'arg1' and 'arg2' are the distribution's parameters.
 
-    Parameters:
-    value (str): A validated string representing the distribution and its parameters.
+    Args:
+        value (str): A validated string representing the distribution and its parameters.
 
     Returns:
-    Union[rv_continuous, rv_discrete]: A SciPy distribution object corresponding to the
-    specified input string. This can be either a continuous or a discrete distribution.
+        Union[rv_continuous, rv_discrete]: A SciPy distribution object corresponding to the
+                                           specified input string, which can be either a continuous
+                                           or a discrete distribution.
     """
     match = re.match(r'^(uniform|loguniform|randint)\(([^,]+), ([^)]+)\)$', value)
     func_name, arg1, arg2 = match.groups()
@@ -361,15 +373,15 @@ def escape_quotes_in_curly_brackets(string: str) -> str:
     """
     Escapes double quotes inside curly brackets in a given string.
 
-    Note: In Python's output, escaped characters (e.g., \") are shown with double backslashes (\\") for clarity.
-    However, when written to a file or used in another context, only the intended escape sequence (\")
-    appears, with a single backslash.
+    This utility function is designed to prepare strings (especially JSON strings) for processing
+    by escaping double quotes inside curly brackets, making them suitable for use in contexts
+    where unescaped quotes could lead to parsing errors or unintended behavior.
 
     Args:
-    string (str): The string in which the escaping should be performed.
+        string (str): The string in which double quotes inside curly brackets need to be escaped.
 
     Returns:
-    str: The modified string with escaped quotes inside curly brackets.
+        str: The modified string with quotes inside curly brackets escaped.
     """
     curly_bracket_parts = re.findall(r'\{[^{}]*\}', string)
     modified_parts = [part.replace('"', r'\"') for part in curly_bracket_parts]
@@ -380,16 +392,19 @@ def escape_quotes_in_curly_brackets(string: str) -> str:
 
 def get_function_full_name(func):
     """
-    Retrieve the full name of a function, including its module path.
+    Retrieves the full name of a function, including its module path.
 
-    This function takes a function object as an argument and returns its complete name in the format 'module_name.function_name'.
-    If the argument is not a callable function (e.g., a string like "Not Applicable"), it returns the argument as it is.
+    This function is useful for logging, debugging, or any scenario where understanding the
+    full scope of a function's origin is beneficial. If the argument is not a callable function
+    (e.g., if it's a string representing a non-callable entity), it returns the argument as is.
 
-    Parameters:
-    func (Callable or str): The function object for which the full name is required, or a string representing a non-callable entity.
+    Args:
+        func (Callable or str): The function object for which the full name is required,
+                                or a string representing a non-callable entity.
 
     Returns:
-    str: The full name of the function including its module path if it's callable, or the original string if it's not callable.
+        str: The full name of the function including its module path if it's callable, or
+             the original string if it's not callable.
     """
     if callable(func):
         return f"{func.__module__}.{func.__name__}"
@@ -398,19 +413,15 @@ def get_function_full_name(func):
 
 def main(parsed_args: argparse.Namespace) -> None:
     """
-    Main function to execute the machine learning workflow.
+    Main function to orchestrate the machine learning workflow.
 
-    This function dynamically loads data loading, preprocessing, feature extraction,
-    and evaluation functions based on the provided arguments. It initializes or reloads
-    the specified model, performs data splitting, model training (including hyperparameter
-    optimization if specified), and evaluates the model.
+    Dynamically loads and applies data loading, preprocessing, feature extraction, and
+    evaluation functions based on provided arguments. It manages model initialization
+    or reloading, data splitting, model training (including hyperparameter optimization),
+    and evaluation. Also handles output saving based on user flags.
 
-    Parameters:
-    parsed_args (argparse.Namespace): The namespace object containing command-line arguments.
-
-    Note:
-    The function handles different scenarios such as using sklearn models, TensorFlow models,
-    reusing pre-trained models, and saving outputs including models, reports, and figures.
+    Args:
+        parsed_args (argparse.Namespace): The namespace object containing command-line arguments.
     """
     # Initialize logger
     output_reports_dir = None
@@ -432,6 +443,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     logger.info("Initializing functions and model...")
     load_data_fn = DATA_LOADING_FNS.get(parsed_args.data_loading_fn)
     preprocess_fn = PREPROCESSING_FNS.get(parsed_args.preprocessing_fn)
+    eda_fn = EDA_FNS.get(parsed_args.eda_fn)
     extract_features_fn = FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn)
     split_data_fn = SPLITTING_FNS.get(parsed_args.split_fn)
     evaluate_fn = EVALUATION_FNS.get(parsed_args.evaluation_fn)
@@ -443,6 +455,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     logger.info("Loading data and extracting features...")
     X, Y = load_data_fn(parsed_args.data_path)
     X, Y = preprocess_fn(X, Y)
+    _ = eda_fn(X, Y)
     X, Y = extract_features_fn(X, Y)
 
     # Split data
@@ -631,6 +644,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_hparams', default=None, help='JSON string of model hyperparameters')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
     parser.add_argument('--preprocessing_fn', default='preprocess_passthrough', choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
+    parser.add_argument('--eda_fn', default='eda_passthrough', choices=EDA_FNS.keys(), help='Identifier for exploratory data analysis function')
     parser.add_argument('--feature_extraction_fn', default='features_passthrough', choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
     parser.add_argument('--split_fn', default='split_passthrough', help='Identifier for data split function')
     parser.add_argument('--split_ratio', type=str, help='Ratio for splitting data')

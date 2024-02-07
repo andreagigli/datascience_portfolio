@@ -3,21 +3,24 @@ from sklearn.model_selection import train_test_split
 
 def split_data(X, Y, random_seed=None, train_prc=70, val_prc=15, test_prc=15):
     """
-    Splits the dataset into training, validation, and test sets.
+    Splits the dataset into training, validation, and test sets based on specified percentages.
 
-    Parameters:
-    X (pd.DataFrame): DataFrame containing the features.
-    Y (pd.DataFrame): DataFrame containing the target variable.
-    train_prc (int): Percentage of the dataset to include in the training set.
-    val_prc (int): Percentage of the dataset to include in the validation set.
-    test_prc (int): Percentage of the dataset to include in the test set.
-    random_seed (int): Random seed for reproducibility.
+    Args:
+        X (DataFrame): DataFrame containing the features.
+        Y (DataFrame): DataFrame containing the target variable.
+        train_prc (int): Percentage of the dataset to include in the training set.
+        val_prc (int): Percentage of the dataset to include in the validation set.
+        test_prc (int): Percentage of the dataset to include in the test set.
+        random_seed (Optional[int]): Seed for random number generator to ensure reproducibility.
 
     Returns:
-    X_train, Y_train (pd.DataFrame): Training data.
-    X_val, Y_val (pd.DataFrame): Validation data.
-    X_test, Y_test (pd.DataFrame): Test data.
-    cv_indices (None): Cross-validation indices are not applicable here. Only added for consistency across split_data functions.
+        X_train (DataFrame): Training set features.
+        Y_train (DataFrame): Training set target variable.
+        X_val (DataFrame): Validation set features.
+        Y_val (DataFrame): Validation set target variable.
+        X_test (DataFrame): Test set features.
+        Y_test (DataFrame): Test set target variable.
+        cv_indices (None): Placeholder for cross-validation indices, indicating no cross-validation indices are provided in this function.
     """
     assert train_prc + val_prc + test_prc == 100, "Sum of ratios must be 100"
 
