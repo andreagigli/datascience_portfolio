@@ -16,6 +16,12 @@ def downcast(df):
     Returns:
         pd.DataFrame: The optimized DataFrame with downcasted data types.
     """
+    # If the input is a series, convert it to a dataframe
+    series_as_input = False
+    if isinstance(df, pd.Series):
+        series_as_input = True
+        df = pd.DataFrame(df, columns=["value"])
+
     # Iterate over each column in the DataFrame
     for col in df.columns:
         col_type = df[col].dtype
@@ -31,5 +37,9 @@ def downcast(df):
                 # Attempt to convert to category only if the number of unique values is less than 50% of total values
                 if len(df[col].unique()) / len(df[col]) < 0.5:
                     df[col] = df[col].astype('category')
+
+    # If the input was a series, return it to a series
+    if series_as_input:
+        df = df["value"]
 
     return df
