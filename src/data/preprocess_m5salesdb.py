@@ -215,22 +215,6 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
 
     # endregion
 
-    # region Data processing
-
-    print("\n\nPreprocess dataframes")
-
-    print("Simplify sales['id']")
-    if sales['id'].str.endswith('_evaluation').all():
-        sales['id'] = sales['id'].str.replace('_evaluation', '')
-
-    # Cast data to most adequate types in order to save memory
-    print("Downcast data to save memory")
-    sales = downcast(sales)
-    calendar = downcast(calendar)
-    sell_prices = downcast(sell_prices)
-
-    # endregion
-
     # region Join datasets
 
     print("\n\nPrepare to join sales, sell_prices, calendar datasets")
@@ -285,6 +269,31 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
 
     # Integrate the sell prices into the sales dataframe based on the common fields
     sales = pd.merge(sales, sell_prices, on=["store_id", "item_id", "wm_yr_wk"], how="left")
+
+    # Sort the dataframe so that the temporal evolution of the target variable is immediately evident for each item
+    sales = sales.sort_values(by=["id", "d"])  # Sort by the item and then by the day
+
+    # endregion
+
+    # region Data processing
+
+    print("\n\nPreprocess dataframes")
+
+    print("Simplify sales['id']")
+    if sales['id'].str.endswith('_evaluation').all():
+        sales['id'] = sales['id'].str.replace('_evaluation', '')
+
+    print("Convert the day into a number")
+    sales["d"] = sales["d"].apply(lambda s: s.split("_")[1]).astype(np.int16)
+
+    print("Cast specific columns to categorical type")
+    columns_to_convert = ['item_id', 'dept_id', 'cat_id', 'store_id', 'state_id', 'event_name_1', 'event_type_1',
+                          'event_name_2', 'event_type_2', "snap_CA", "snap_TX", "snap_WI"]
+    sales[columns_to_convert] = sales[columns_to_convert].astype('category')
+
+    # Cast data to most adequate types in order to save memory
+    print("Downcast data to save memory")
+    sales = downcast(sales)
 
     # endregion
 

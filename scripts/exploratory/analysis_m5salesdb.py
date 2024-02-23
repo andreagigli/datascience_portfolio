@@ -132,7 +132,6 @@ import src.data.load_exampledb
 import src.data.load_m5salesdb
 import src.data.preprocess_m5salesdb
 import src.data.preprocess_passthrough
-import src.features.features_passthrough
 import src.data.split_train_val_test
 import src.data.split_train_test
 import src.data.split_passthrough
@@ -140,6 +139,8 @@ import src.eda.eda_m5salesdb
 import src.eda.eda_passthrough
 import src.evaluation.evaluate_exampledb
 import src.evaluation.evaluate_passthrough
+import src.features.features_passthrough
+import src.features.features_m5salesdb
 from src.optimization.custom_sk_validators import PredefinedSplit
 
 from src.utils.my_os import ensure_dir_exists
@@ -166,6 +167,7 @@ EDA_FNS: Dict[str, Callable] = {
 }
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_passthrough": src.features.features_passthrough.extract_features,
+    "features_m5salesdb": src.features.features_m5salesdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
     "split_train_val_test": src.data.split_train_val_test.split_data,
@@ -450,7 +452,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     sales = preprocess_fn(sales, sell_prices, calendar)
 
     # Exploratory data analysis
-    _ = eda_fn(sales)
+    # _ = eda_fn(sales)
 
     # preprocess, extract features
     X, Y = extract_features_fn(sales)
