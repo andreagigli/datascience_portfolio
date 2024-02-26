@@ -17,10 +17,10 @@ python analysis_exampledb.py
 --log_level INFO
 --random_seed 0
 --save_output
---output_data_dir ../../data/processed
---output_model_dir ../../models
---output_reports_dir ../../outputs/reports
---output_figures_dir ../../outputs/figures
+--output_data_dir ../../data/processed/
+--output_model_dir ../../models/
+--output_reports_dir ../../outputs/reports/
+--output_figures_dir ../../outputs/figures/
 
 2. Basic usage with minimal function call (no hypopt, split train-test)
 python analysis_exampledb.py
@@ -446,16 +446,24 @@ def main(parsed_args: argparse.Namespace) -> None:
     # Initialize model or reload existing one
     model = init_reload_model(parsed_args)
 
-    # Load data
-    logger.info("Loading data and extracting features...")
-    sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
-    sales = preprocess_fn(sales, sell_prices, calendar)
+    if parsed_args.precomputed_features_path:
+        # Load the pre-computed features
+        sales = pd.read_csv(parsed_args.precomputed_features_path)
+    else:
+        # Load data
+        logger.info("Loading data and extracting features...")
+        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
+        sales = preprocess_fn(sales, sell_prices, calendar)
 
-    # Exploratory data analysis
-    # _ = eda_fn(sales)
+        # Exploratory data analysis
+        _ = eda_fn(sales)
 
-    # preprocess, extract features
-    X, Y = extract_features_fn(sales)
+        # preprocess, extract features
+        X, Y = extract_features_fn(sales)
+        if parsed_args.save_output:
+            dbname = os.path.basename(parsed_args.data_path).split('.')[0]  # Extracts filename from data_path without extension
+            output_features_path = os.path.join(parsed_args.output_data_dir, f"{dbname}.csv")
+            sales.to_csv(output_features_path, index=False)
 
     # Split data
     if parsed_args.split_fn != "split_passthrough":
@@ -638,6 +646,7 @@ def main(parsed_args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Machine Learning Script")
     parser.add_argument('--data_path', required=True, help='Path to the data file')
+    parser.add_argument('--precomputed_features_path', type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
     parser.add_argument('--data_loading_fn', required=True, help='Function identifier for loading data')
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
     parser.add_argument('--model_hparams', default=None, help='JSON string of model hyperparameters')
