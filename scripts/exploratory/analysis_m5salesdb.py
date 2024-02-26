@@ -455,8 +455,8 @@ def main(parsed_args: argparse.Namespace) -> None:
         sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
         sales = preprocess_fn(sales, sell_prices, calendar)
 
-        # Exploratory data analysis
-        _ = eda_fn(sales)
+        # # Exploratory data analysis
+        # _ = eda_fn(sales)
 
         # preprocess, extract features
         X, Y = extract_features_fn(sales)

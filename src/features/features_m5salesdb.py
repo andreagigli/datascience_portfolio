@@ -23,8 +23,8 @@ def extract_features(sales):
     for lag in lags:
         # Create the lagged column
         sales[f"sold_lag_{lag}"] = sales.groupby("id")["sold"].shift(lag)
-        # Compute and fill NaNs with mean sales per item
-        # sales[f"sold_lag_{lag}"] = sales.groupby("id")["sold"].transform(lambda x: x.fillna(x.mean()))
+        # Backfill the NaN values in the lagged columns for each group
+        sales[f"sold_lag_{lag}"] = sales.groupby("id")[f"sold_lag_{lag}"].transform(lambda x: x.bfill())
 
     # Robust lag features: obtained as a lagged rolling window (e.g. a rolling window of size 3 computed 7 days before the current value)
     lags = [7, 30, 355]
@@ -37,6 +37,8 @@ def extract_features(sales):
                 lambda x: x.shift(lag)  # Shift the 'sold' column by the specified lag to get the lagged data
                 .rolling(window=window_size, min_periods=1).mean())  # Apply rolling mean to the lagged data
         )
+        # Backfill the NaN values in the lagged columns for each group
+        sales[f'sold_robustlag_{lag}'] = sales.groupby("id")[f'sold_robustlag_{lag}'].transform(lambda x: x.bfill())
 
     # Compute mean encodings
     sales["sold_avg_item"] = sales.groupby("item_id", observed=True)["sold"].transform("mean").astype(
