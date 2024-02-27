@@ -48,7 +48,7 @@ def load_data(dpath: str, debug: bool = False) -> Tuple[DataFrame, DataFrame, Da
 
     # Eliminate part of the days for faster computation while in debug
     if debug:
-        columns_to_drop = [col for col in sales.columns if col.startswith('d_') and int(col.split('_')[1]) > 150]
+        columns_to_drop = [col for col in sales.columns if col.startswith('d_') and int(col.split('_')[1]) > 200]
         sales.drop(columns=columns_to_drop, inplace=True)
 
     return sales, sell_prices, calendar

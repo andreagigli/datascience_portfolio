@@ -1,8 +1,7 @@
-import warnings
-
 import numpy as np
 import pandas as pd
 import re
+import warnings
 
 from matplotlib import pyplot as plt
 from typing import Tuple
@@ -10,8 +9,7 @@ from typing import Tuple
 from src.utils.my_dataframe import downcast
 
 
-def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd.DataFrame) -> Tuple[
-    pd.DataFrame, pd.DataFrame]:
+def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Preprocesses sales, sell prices, and calendar datasets for time series analysis.
 
@@ -37,8 +35,10 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     pd.set_option('display.width', None)
 
     # region Inspect dataset 'sales'
-    print("\n\n\n************* Inspect 'sales' *************\n")
-    print("\n************* Dataset structure *************\n")
+    print("\n\n\n*******************************************")
+    print("************* Inspect 'sales' *************")
+    print("*******************************************")
+    print("\n************* Dataset structure *************")
     print("Shape:")
     print(sales.shape)
     print("There are more than 10 columns to be printed: attempt grouping patterned columns with same dtype.")
@@ -57,10 +57,10 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     print("Info:")
     print(sales_view.info(show_counts=True))
 
-    print("************* Missing data *************\n")
-    print(f"Missing values: None, (see db.info() above)\n")
+    print("\n************* Missing data *************")
+    print(f"Missing values: None, (see db.info() above)")
 
-    print("************* Data description *************\n")
+    print("\n************* Data description *************")
     print("Number of unique values:")
     print(sales_view.nunique())
     print("Value counts of categorical column:")
@@ -75,8 +75,10 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     # endregion
 
     # region Inspect dataset 'sell_prices'
-    print("\n\n\n************* Inspect 'sell_prices' *************\n")
-    print("\n************* Dataset structure *************\n")
+    print("\n\n\n*******************************************")
+    print("************* Inspect 'sell_prices' *************")
+    print("*******************************************")
+    print("\n************* Dataset structure *************")
     print("Shape:")
     print(sell_prices.shape)
     print("Head:")
@@ -84,10 +86,10 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     print("Info:")
     print(sell_prices.info(show_counts=True))
 
-    print("************* Missing data *************\n")
-    print("Missing values: None, (see db.info() above)\n")
+    print("\n************* Missing data *************")
+    print("Missing values: None, (see db.info() above)")
 
-    print("************* Data description *************\n")
+    print("\n************* Data description *************")
     print("Number of unique values:")
     print(sell_prices.nunique())
     print("Value counts of categorical column:")
@@ -100,8 +102,10 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     # endregion
 
     # region Inspect dataset 'calendar'
-    print("\n\n\n************* Inspect 'calendar' *************\n")
-    print("\n************* Dataset structure *************\n")
+    print("\n\n\n*******************************************")
+    print("************* Inspect 'calendar' *************")
+    print("*******************************************")
+    print("\n************* Dataset structure *************")
     print("Shape:")
     print(calendar.shape)
     print("Head:")
@@ -109,10 +113,10 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     print("Info:")
     print(calendar.info(show_counts=True))
 
-    print("************* Missing data *************\n")
+    print("\n************* Missing data *************")
     print(
         "The db.info() above reveals suspect missing values in cols ['event_name_1', 'event_type_1', 'event_name_2', 'event_type_2']. Remember: the db has",
-        calendar.shape[0], "entries in total.\n")
+        calendar.shape[0], "entries in total.")
 
     print("Study the NaN entries with db.isna().sum():")
     print(calendar.isna().sum())
@@ -148,7 +152,7 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     # (although 'None' or 'NaN' are also used) or NaN for numeric columns. For maximum compatibility,
     # redefine all the NaN entries with pd.NA. If so, df = df.fillna(pd.NA).
 
-    print("************* Data description *************\n")
+    print("\n************* Data description *************")
     print("Number of unique values:")
     print(calendar.nunique())
     print("Value counts of categorical column:")
@@ -156,7 +160,7 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     print("Description of numerical columns:")
     print(calendar.describe())
 
-    print("************* Sanity of temporal information *************\n")
+    print("\n************* Sanity of temporal information *************")
     # Cast the date field into datetime format
     calendar['date'] = pd.to_datetime(calendar['date'])
 
@@ -173,7 +177,7 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     assert calendar['d'].str.extract('(\d+)').astype(int).diff().dropna().gt(0).all().all(), \
         "The 'd' column is not monotonically increasing. This column does not logically correspond to the dates."
 
-    print("************* Characteristics of temporal information *************\n")
+    print("\n************* Characteristics of temporal information *************")
     print(f"The start and end dates in the calendar are {calendar['date'].min()} and {calendar['date'].max()}, respectively.")
 
     print("Time gaps:")
@@ -220,6 +224,12 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     # region Join datasets
 
     print("\n\nPrepare to join sales, sell_prices, calendar datasets")
+
+    print("Downcast data to save memory")
+    sales = downcast(sales)
+    calendar = downcast(calendar)
+    sell_prices = downcast(sell_prices)
+
     """
     Joining together sell price and date information for multiple items at multiple time points involves transforming 
     all dataframes into a long format. In this format, each row corresponds to one item at one time point, organizing 
@@ -259,6 +269,7 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     In this case, it is possible to shuffle the rows, as each row pertains to a different item.
     """
     # Ensure all dataframes are in long format with each row representing a unique item-timePoint
+    print("Melt sales dataframe")
     sales = pd.melt(sales,
                     id_vars=["id", "item_id", "dept_id", "cat_id", "store_id", "state_id"],
                     var_name="d",
@@ -267,9 +278,11 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
                     )
 
     # Integrate the calendar dates into (notice "left") the sales dataframe based on d
+    print("Merge sales and calendar dataframes")
     sales = pd.merge(sales, calendar, on="d", how="left")
 
     # Integrate the sell prices into the sales dataframe based on the common fields
+    print("Merge sales and sell_prices dataframes")
     sales = pd.merge(sales, sell_prices, on=["store_id", "item_id", "wm_yr_wk"], how="left")
 
     # endregion

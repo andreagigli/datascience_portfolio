@@ -171,9 +171,10 @@ FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_m5salesdb": src.features.features_m5salesdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
+    "split_passthrough": src.data.split_passthrough.split_data,
     "split_train_val_test": src.data.split_train_val_test.split_data,
     "split_train_test": src.data.split_train_test.split_data,
-    "split_passthrough": src.data.split_passthrough.split_data,
+    # "split_m5salesdb": src.data.split_m5salesdb.split_data,
 }
 RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'loguniform': loguniform,
@@ -449,8 +450,8 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     if parsed_args.precomputed_features_path:
         # Load the pre-computed features
-        X = pd.read_csv(os.path.join(parsed_args.precomputed_features_path, "X.csv"))
-        Y = pd.read_csv(os.path.join(parsed_args.precomputed_features_path, "Y.csv"))
+        X = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "X.pkl"))
+        Y = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "Y.pkl"))
 
     else:
         # Load data
@@ -465,11 +466,11 @@ def main(parsed_args: argparse.Namespace) -> None:
         X, Y = extract_features_fn(sales)
         if parsed_args.save_output:
             dbname = os.path.basename(parsed_args.data_path.rstrip('/'))  # Extracts filename from data_path without extension
-            X.to_csv(os.path.join(parsed_args.output_data_dir, dbname, f"X.csv"), index=False)
-            Y.to_csv(os.path.join(parsed_args.output_data_dir, dbname, f"Y.csv"), index=False)
+            output_dir = os.path.join(parsed_args.output_data_dir, dbname)
+            os.makedirs(output_dir, exist_ok=True)
+            X.to_pickle(os.path.join(output_dir, "X.pkl"))
+            Y.to_pickle(os.path.join(output_dir, "Y.pkl"))
         del sales, sell_prices, calendar
-
-    "fail".here()
 
     # Split data
     if parsed_args.split_fn != "split_passthrough":

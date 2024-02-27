@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
 
+from dask.distributed import Client
 
-def extract_features(sales):
+
+def extract_features(sales: pd.DataFrame):
     """
     Extract and generate a set of features for the sales DataFrame, including lag and robust lag features,
     mean encodings, rolling-window and expanding-window statistics, detrended features, one-hot encoding of categorical
@@ -96,7 +98,6 @@ def extract_features(sales):
     sales["snap_CA"] = sales["snap_CA"].astype(bool)
     sales["snap_TX"] = sales["snap_TX"].astype(bool)
     sales["snap_WI"] = sales["snap_WI"].astype(bool)
-
     """ 
     Strategies for dealing with high-cardinality categorical features like "item_id":
      1. Replace with category codes: Converts categories to their integer codes to reduce storage space. As a note, it"s 
@@ -118,7 +119,7 @@ def extract_features(sales):
     # One-hot encode the categorical features
     print("One-hot encode the categorical features")
     cat_cols = sales.select_dtypes(include=["category"]).columns
-    sales = pd.get_dummies(sales, columns=cat_cols)
+    sales = pd.get_dummies(sales, columns=cat_cols, sparse=True, dtype=bool)
     # Drop the "NoEvent" columns that arise from the one-hot encoding of the "event" columns (they are redundant)
     sales = sales.drop(columns=[col for col in sales.columns if "NoEvent" in col])
 
