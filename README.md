@@ -2,6 +2,7 @@
 
 ## Description
 A portfolio of machine learning and data science projects using my own ML and Data Science Python package.
+This analysis is based on the Kaggle sales prediction challenge using the M5 sales dataset (https://www.kaggle.com/c/m5-forecasting-accuracy). 
 
 ## Project Structure
 
