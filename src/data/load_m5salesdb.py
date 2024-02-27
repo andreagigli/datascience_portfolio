@@ -7,7 +7,7 @@ from pandas import DataFrame
 from typing import Tuple
 
 
-def load_data(dpath: str) -> Tuple[DataFrame, DataFrame, DataFrame]:
+def load_data(dpath: str, debug: bool = False) -> Tuple[DataFrame, DataFrame, DataFrame]:
     """
     Loads the M5 sales dataset, aimed at forecasting Walmart product sales for the next 28 days.
 
@@ -24,6 +24,7 @@ def load_data(dpath: str) -> Tuple[DataFrame, DataFrame, DataFrame]:
 
     Parameters:
     dpath (str): Path to the dataset CSV files.
+    debug (str): If true eliminates a number of time points for faster processing.
 
     Returns:
     sales (pd.DataFrame): Dataframe containing main feature and historical sales for all the items.
@@ -44,5 +45,10 @@ def load_data(dpath: str) -> Tuple[DataFrame, DataFrame, DataFrame]:
     sales = sales.astype({col: pd.StringDtype() for col in sales.select_dtypes('object').columns})
     sell_prices = sell_prices.astype({col:  pd.StringDtype()for col in sell_prices.select_dtypes('object').columns})
     calendar = calendar.astype({col:  pd.StringDtype() for col in calendar.select_dtypes('object').columns})
+
+    # Eliminate part of the days for faster computation while in debug
+    if debug:
+        columns_to_drop = [col for col in sales.columns if col.startswith('d_') and int(col.split('_')[1]) > 150]
+        sales.drop(columns=columns_to_drop, inplace=True)
 
     return sales, sell_prices, calendar

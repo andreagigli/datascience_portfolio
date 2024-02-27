@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import re
@@ -215,22 +217,6 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
 
     # endregion
 
-    # region Data processing
-
-    print("\n\nPreprocess dataframes")
-
-    print("Simplify sales['id']")
-    if sales['id'].str.endswith('_evaluation').all():
-        sales['id'] = sales['id'].str.replace('_evaluation', '')
-
-    # Cast data to most adequate types in order to save memory
-    print("Downcast data to save memory")
-    sales = downcast(sales)
-    calendar = downcast(calendar)
-    sell_prices = downcast(sell_prices)
-
-    # endregion
-
     # region Join datasets
 
     print("\n\nPrepare to join sales, sell_prices, calendar datasets")
@@ -285,6 +271,52 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
 
     # Integrate the sell prices into the sales dataframe based on the common fields
     sales = pd.merge(sales, sell_prices, on=["store_id", "item_id", "wm_yr_wk"], how="left")
+
+    # endregion
+
+    # region Data processing
+
+    print("\n\nPreprocess dataframes")
+
+    print("Simplify sales['id']")
+    if sales['id'].str.endswith('_evaluation').all():
+        sales['id'] = sales['id'].str.replace('_evaluation', '')
+
+    print("Convert the day into a number")
+    sales["d"] = sales["d"].apply(lambda s: s.split("_")[1]).astype(np.int16)
+
+    print("Align weekday and wday columns (monday=1, tuesday=2, ...)")
+    weekday_to_num = {'Monday': 1,
+                      'Tuesday': 2,
+                      'Wednesday': 3,
+                      'Thursday': 4,
+                      'Friday': 5,
+                      'Saturday': 6,
+                      'Sunday': 7}
+    sales['wday'] = sales['weekday'].map(weekday_to_num)
+
+    print("Cast specific columns to categorical type")
+    columns_to_convert = ['item_id', 'dept_id', 'cat_id', 'store_id', 'state_id', 'event_name_1', 'event_type_1',
+                          'event_name_2', 'event_type_2']  # Note that binary columns must be left numerical
+    sales[columns_to_convert] = sales[columns_to_convert].astype('category')
+
+    # Cast data to most adequate types in order to save memory
+    print("Downcast data to save memory")
+    sales = downcast(sales)
+
+    # Check residual NaN values and handle them through elimination or samples or imputation
+    print("Check if there are any remaining columns with NaN: ")
+    sales.isna().any()
+    print(f"Impute NaN values for the column sell_price as the median sell_price for the item")
+    # Step 1: Attempt group-wise Median Imputation
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        sales['sell_price'] = sales.groupby("id")['sell_price'].transform(lambda x: x.fillna(x.median()))
+    # Step 2: Global Median Imputation for remaining NaNs (for whom the sell_price might be NaN for the entire group)
+    sales['sell_price'] = sales['sell_price'].fillna(sales['sell_price'].median())
+
+    # Sort the dataframe so that the temporal evolution of the target variable is immediately evident for each item
+    sales = sales.sort_values(by=["id", "d"]).reset_index(drop=True)  # Sort by the item and then by the day
 
     # endregion
 
