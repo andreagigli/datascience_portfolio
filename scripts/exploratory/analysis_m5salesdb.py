@@ -5,7 +5,8 @@ Example shell calls:
 
 1. Basic usage with required arguments (no hypopt, split train-test)
 python analysis_exampledb.py
---data_path ../../data/external/exampledb/california_housing.csv
+--data_path ../../data/external/exampledb/m5salesdb.csv
+--precomputed_features_path ../../data/processed/m5salesdb/
 --data_loading_fn load_exampledb
 --model sklearn_RandomForestRegressor
 --model_hparams "{\"n_estimators\": 100, \"max_depth\": 10}"
@@ -448,11 +449,13 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     if parsed_args.precomputed_features_path:
         # Load the pre-computed features
-        sales = pd.read_csv(parsed_args.precomputed_features_path)
+        X = pd.read_csv(os.path.join(parsed_args.precomputed_features_path, "X.csv"))
+        Y = pd.read_csv(os.path.join(parsed_args.precomputed_features_path, "Y.csv"))
+
     else:
         # Load data
         logger.info("Loading data and extracting features...")
-        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
+        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)
         sales = preprocess_fn(sales, sell_prices, calendar)
 
         # # Exploratory data analysis
@@ -461,9 +464,12 @@ def main(parsed_args: argparse.Namespace) -> None:
         # preprocess, extract features
         X, Y = extract_features_fn(sales)
         if parsed_args.save_output:
-            dbname = os.path.basename(parsed_args.data_path).split('.')[0]  # Extracts filename from data_path without extension
-            output_features_path = os.path.join(parsed_args.output_data_dir, f"{dbname}.csv")
-            sales.to_csv(output_features_path, index=False)
+            dbname = os.path.basename(parsed_args.data_path.rstrip('/'))  # Extracts filename from data_path without extension
+            X.to_csv(os.path.join(parsed_args.output_data_dir, dbname, f"X.csv"), index=False)
+            Y.to_csv(os.path.join(parsed_args.output_data_dir, dbname, f"Y.csv"), index=False)
+        del sales, sell_prices, calendar
+
+    "fail".here()
 
     # Split data
     if parsed_args.split_fn != "split_passthrough":

@@ -285,6 +285,16 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     print("Convert the day into a number")
     sales["d"] = sales["d"].apply(lambda s: s.split("_")[1]).astype(np.int16)
 
+    print("Align weekday and wday columns (monday=1, tuesday=2, ...)")
+    weekday_to_num = {'Monday': 1,
+                      'Tuesday': 2,
+                      'Wednesday': 3,
+                      'Thursday': 4,
+                      'Friday': 5,
+                      'Saturday': 6,
+                      'Sunday': 7}
+    sales['wday'] = sales['weekday'].map(weekday_to_num)
+
     print("Cast specific columns to categorical type")
     columns_to_convert = ['item_id', 'dept_id', 'cat_id', 'store_id', 'state_id', 'event_name_1', 'event_type_1',
                           'event_name_2', 'event_type_2']  # Note that binary columns must be left numerical
