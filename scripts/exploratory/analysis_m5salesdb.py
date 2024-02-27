@@ -449,8 +449,8 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     if parsed_args.precomputed_features_path:
         # Load the pre-computed features
-        X = pd.read_csv(os.path.join(parsed_args.precomputed_features_path, "X.csv"))
-        Y = pd.read_csv(os.path.join(parsed_args.precomputed_features_path, "Y.csv"))
+        X = pd.read_hdf(os.path.join(parsed_args.precomputed_features_path, "X.h5"), key='df')
+        Y = pd.read_hdf(os.path.join(parsed_args.precomputed_features_path, "Y.h5"), key='df')
 
     else:
         # Load data
@@ -465,8 +465,10 @@ def main(parsed_args: argparse.Namespace) -> None:
         X, Y = extract_features_fn(sales)
         if parsed_args.save_output:
             dbname = os.path.basename(parsed_args.data_path.rstrip('/'))  # Extracts filename from data_path without extension
-            X.to_csv(os.path.join(parsed_args.output_data_dir, dbname, f"X.csv"), index=False)
-            Y.to_csv(os.path.join(parsed_args.output_data_dir, dbname, f"Y.csv"), index=False)
+            output_dir = os.path.join(parsed_args.output_data_dir, dbname)
+            os.makedirs(output_dir, exist_ok=True)
+            X.to_hdf(os.path.join(output_dir, "X.h5"), key='df', format='table')
+            Y.to_hdf(os.path.join(output_dir, "Y.h5"), key='df', format='table')
         del sales, sell_prices, calendar
 
     "fail".here()
