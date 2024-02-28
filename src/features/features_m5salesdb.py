@@ -1,9 +1,6 @@
 import numpy as np
 import pandas as pd
 
-from dask.distributed import Client
-
-
 def extract_features(sales: pd.DataFrame):
     """
     Extract and generate a set of features for the sales DataFrame, including lag and robust lag features,

@@ -1,0 +1,2 @@
+# Custom merge behavior: do not allow the main's README to be overridden by other branches' one.
+README.md merge=ours
