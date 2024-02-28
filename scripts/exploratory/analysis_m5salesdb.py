@@ -479,7 +479,6 @@ def main(parsed_args: argparse.Namespace) -> None:
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y)
     else:
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
-        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices)  # This is correct as split_data_fn would be split_passthrough
 
     # Distinguish between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
