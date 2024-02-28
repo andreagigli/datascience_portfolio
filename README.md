@@ -4,6 +4,35 @@
 A portfolio of machine learning and data science projects using my own ML and Data Science Python package.
 This analysis is based on the Kaggle sales prediction challenge using the M5 sales dataset (https://www.kaggle.com/c/m5-forecasting-accuracy). 
 
+
+## M5 Sales Forecasting Challenge Overview
+
+### Objective
+
+The primary goal of the M5 sales forecasting challenge is to predict the daily sales for various products sold across ten Walmart stores located in three different US states. 
+One is expected to forecast the unit sales of 3,049 products, categorized into 3 main categories and 7 departments, over a period of 28 days. 
+
+
+### Data Description
+
+The dataset for this challenge consists of the following files provided on Kaggle:
+
+- **sales_train_evaluation.csv**: This file includes the historical daily unit sales data per product and store from day 1 (d_1) to day 1941 (d_1941). 
+
+- **sell_prices.csv**: This file contains information about the price of the products sold per store and date. 
+
+- **calendar.csv**: The calendar file includes details about the dates on which the products are sold, including day of the week, month, year, and any special events or holidays that might affect sales. 
+
+
+### Sequential forecasting strategy
+
+To predict sales volumes over the following 28 days, a sequential forecasting is applied. 
+Starting with initial sales data for an item and shop on a specific day, the model forecasts the next day's sales. 
+This prediction is then utilized to update the model's features for the subsequent day. 
+This process is iterated to allow a chain of forecasts across multiple future days. 
+Training covers data up to day 1912, with days 1912 to 1940 used for validation, and days 1941 to 1969 for testing.
+
+
 ## Project Structure
 
 ```
