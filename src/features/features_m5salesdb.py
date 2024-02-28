@@ -120,19 +120,24 @@ def extract_features(sales: pd.DataFrame):
     # Drop the "NoEvent" columns that arise from the one-hot encoding of the "event" columns (they are redundant)
     sales = sales.drop(columns=[col for col in sales.columns if "NoEvent" in col])
 
+    # Create target variable by shifting the sales backwards, so that the model learns to predict the next day's sales
+    sales["target"] = sales.groupby("id")['sold'].shift(-1).fillna(0)
+
     # Zero-out the "sales-related" features that were computed for days 1942-1969 (test days). Since we will be
     # performing sequential inference, those features will be computed at inference time using the model prediction,
     # one day at a time.
-    columns_to_zero = [col for col in sales.columns if col.startswith('sold_')]
+    columns_to_zero = [col for col in sales.columns if col.startswith('sold')]
     sales.loc[sales["d"] > 1941, columns_to_zero] = 0
 
     # Drop useless features
     print("Drop useless columns")
-    sales = sales.drop(columns=["date", "wm_yr_wk", "weekday"])
+    sales = sales.drop(columns=["date", "wm_yr_wk", "weekday", "sold"])
+
+    # TODO: visualize potential dependencies between features and target variable
 
     # Divide dataframe into X and Y
     print("Separate data into features X and targets Y")
-    Y = sales["sold"]
-    X = sales.drop(columns=["sold"])
+    Y = sales["target"]  # Shift the sales so that the model learns to predict the next day's sales
+    X = sales.drop(columns=["target"])
 
     return X, Y
