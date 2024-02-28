@@ -19,9 +19,9 @@ The dataset for this challenge consists of the following files provided on Kaggl
 
 - **sales_train_evaluation.csv**: This file includes the historical daily unit sales data per product and store from day 1 (d_1) to day 1941 (d_1941). 
 
-- **sell_prices.csv**: This file contains information about the price of the products sold per store and date. 
+- **sell_prices.csv**: This file contains information about the price of the products sold per store and week from day 1 to day 1969. 
 
-- **calendar.csv**: The calendar file includes details about the dates on which the products are sold, including day of the week, month, year, and any special events or holidays that might affect sales. 
+- **calendar.csv**: The calendar file includes details about the dates on which the products are sold from day 1 to day 1969, including day of the week, month, year, and any special events or holidays that might affect sales. 
 
 
 ### Sequential forecasting strategy

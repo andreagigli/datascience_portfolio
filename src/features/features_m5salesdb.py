@@ -120,6 +120,12 @@ def extract_features(sales: pd.DataFrame):
     # Drop the "NoEvent" columns that arise from the one-hot encoding of the "event" columns (they are redundant)
     sales = sales.drop(columns=[col for col in sales.columns if "NoEvent" in col])
 
+    # Zero-out the "sales-related" features that were computed for days 1942-1969 (test days). Since we will be
+    # performing sequential inference, those features will be computed at inference time using the model prediction,
+    # one day at a time.
+    columns_to_zero = [col for col in sales.columns if col.startswith('sold_')]
+    sales.loc[sales["d"] > 1941, columns_to_zero] = 0
+
     # Drop useless features
     print("Drop useless columns")
     sales = sales.drop(columns=["date", "wm_yr_wk", "weekday"])

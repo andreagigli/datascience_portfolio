@@ -133,6 +133,7 @@ import src.data.load_exampledb
 import src.data.load_m5salesdb
 import src.data.preprocess_m5salesdb
 import src.data.preprocess_passthrough
+import src.data.split_m5salesdb
 import src.data.split_train_val_test
 import src.data.split_train_test
 import src.data.split_passthrough
@@ -174,7 +175,7 @@ SPLITTING_FNS: Dict[str, Callable] = {
     "split_passthrough": src.data.split_passthrough.split_data,
     "split_train_val_test": src.data.split_train_val_test.split_data,
     "split_train_test": src.data.split_train_test.split_data,
-    # "split_m5salesdb": src.data.split_m5salesdb.split_data,
+    "split_m5salesdb": src.data.split_m5salesdb.split_data,
 }
 RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'loguniform': loguniform,
@@ -456,7 +457,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     else:
         # Load data
         logger.info("Loading data and extracting features...")
-        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)
+        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
         sales = preprocess_fn(sales, sell_prices, calendar)
 
         # # Exploratory data analysis
@@ -475,11 +476,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     # Split data
     if parsed_args.split_fn != "split_passthrough":
         logger.info("Computing data splits...")
-        split_ratios = [float(el) for el in parsed_args.split_ratio.split()]
-        additional_args = [parsed_args.n_folds,
-                           parsed_args.stratified_kfold] if parsed_args.split_fn == 'split_train_test' else []
-        split_data_fn_args = split_ratios + additional_args
-        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y, parsed_args.random_seed, *split_data_fn_args)
+        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y)
     else:
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices)  # This is correct as split_data_fn would be split_passthrough

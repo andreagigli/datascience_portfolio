@@ -36,7 +36,7 @@ def load_data(dpath: str, debug: bool = False) -> Tuple[DataFrame, DataFrame, Da
     sell_prices = pd.read_csv(os.path.join(dpath, "sell_prices.csv"))
     calendar = pd.read_csv(os.path.join(dpath, "calendar.csv"))
 
-    # Add zero sales for the remaining days 1942-1969
+    # Add zero sales for the remaining days 1942-1969 (they are present in calendar and sell_prices (as weeks) but not in sales)
     days = ['d_' + str(d) for d in range(1942, 1970)]
     sales[days] = 0
     sales[days] = sales[days].astype(np.int16)
@@ -46,9 +46,10 @@ def load_data(dpath: str, debug: bool = False) -> Tuple[DataFrame, DataFrame, Da
     sell_prices = sell_prices.astype({col:  pd.StringDtype()for col in sell_prices.select_dtypes('object').columns})
     calendar = calendar.astype({col:  pd.StringDtype() for col in calendar.select_dtypes('object').columns})
 
-    # Eliminate part of the days for faster computation while in debug
+    # Eliminate part of the items for faster computation while in debug
     if debug:
-        columns_to_drop = [col for col in sales.columns if col.startswith('d_') and int(col.split('_')[1]) > 200]
-        sales.drop(columns=columns_to_drop, inplace=True)
+        sales = sales.groupby(['store_id', "cat_id"]).head(5).reset_index(drop=True)
+        unique_item_ids = sales["item_id"].unique()
+        sell_prices = sell_prices[sell_prices["item_id"].isin(unique_item_ids)].reset_index(drop=True)
 
     return sales, sell_prices, calendar
