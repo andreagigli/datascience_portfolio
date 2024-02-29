@@ -1,7 +1,9 @@
+from typing import Tuple
+
 import numpy as np
 import pandas as pd
 
-def extract_features(sales: pd.DataFrame):
+def extract_features(sales: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Extract and generate a set of features for the sales DataFrame, including lag and robust lag features,
     mean encodings, rolling-window and expanding-window statistics, detrended features, one-hot encoding of categorical
@@ -137,7 +139,7 @@ def extract_features(sales: pd.DataFrame):
 
     # Divide dataframe into X and Y
     print("Separate data into features X and targets Y")
-    Y = sales["target"]  # Shift the sales so that the model learns to predict the next day's sales
+    Y = sales[["target"]]  # Shift the sales so that the model learns to predict the next day's sales
     X = sales.drop(columns=["target"])
 
     return X, Y
