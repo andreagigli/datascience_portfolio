@@ -27,7 +27,7 @@ class PredefinedSplit(BaseCrossValidator):
             search = RandomizedSearchCV(estimator, param_distrib, n_iter=5, cv=ps)
             search.fit(X_combined, y_combined)
         """
-    def __init__(self, test_fold):
+    def __init__(self, test_fold: np.ndarray):
         self.test_fold = test_fold
 
     def get_n_splits(self, X=None, y=None, groups=None):
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     y_combined = np.concatenate([train_labels, validation_labels])
 
     # Create the PredefinedSplit
-    ps = PredefinedSplit(test_fold=val_fold)
+    ps = PredefinedSplit(test_fold=np.array(val_fold))
 
     # Define a simple model and parameter grid for demonstration
     estimator = RandomForestClassifier()

@@ -3,7 +3,7 @@ This script is designed for flexible machine learning workflows. It allows for d
 
 Example shell calls:
 
-1. Basic usage with required arguments (no hypopt, split train-test)
+1. Basic usage with required arguments (no hopt, split train-test)
 
 python analysis_exampledb.py
 --data_path ../../data/external/m5salesdb/
@@ -11,9 +11,10 @@ python analysis_exampledb.py
 --data_loading_fn load_m5salesdb
 --model sklearn_Ridge
 --data_transformers sklearn_RBFSampler
---hparams "{\"sklearn_Ridge__alpha\": \"loguniform(0.1, 10)\", \"sklearn_RBFSampler__gamma\": \"loguniform(0.1, 10)\", \"sklearn_RBFSampler__n_components\": 300}"
---n_rnd_cv_samplings 3
---subsample_train_fn subsample_train_m5salesdb
+--hparams "{\"sklearn_Ridge__alpha\": \"loguniform(0.01, 10)\", \"sklearn_RBFSampler__gamma\": \"loguniform(0.01, 10)\", \"sklearn_RBFSampler__n_components\": 300}"
+--hopt_n_rndcv_samplings 10
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 0.1
 --preprocessing_fn preprocess_m5salesdb
 --eda_fn eda_m5salesdb
 --feature_extraction_fn features_m5salesdb
@@ -29,6 +30,7 @@ python analysis_exampledb.py
 """
 
 import argparse
+import inspect
 import json
 import logging
 import warnings
@@ -51,7 +53,7 @@ from sklearn.kernel_approximation import RBFSampler
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, StandardScaler, MinMaxScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.svm import SVC
 from typing import Dict, Any, Union, Optional, Type, Callable
 
@@ -111,8 +113,8 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'randint': randint,
     'uniform': uniform,
 }
-SUBSAMPLE_TRAIN_FNS: Dict[str, Callable] = {
-    "subsample_train_passthrough": lambda *args, **kwargs: args,
+HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
+    "hopt_subsampling_passthrough": lambda *args, **kwargs: args,
     "subsample_train_m5salesdb": src.data.data_m5salesdb.subsample_items,
 }
 EVALUATION_FNS: Dict[str, Callable] = {
@@ -239,12 +241,12 @@ def check_output_args(save_output: bool, output_data_dir: str, output_model_dir:
             parser.error("All output directories must be specified when --save_output is used")
 
 
-def init_reload_model(args: argparse.Namespace) -> Any:
+def init_reload_model(parsed_args: argparse.Namespace) -> Any:
     """
     Initializes or reloads a model based on the provided command-line arguments.
 
     Args:
-        args (argparse.Namespace): The namespace object containing command-line arguments relevant to model initialization.
+        parsed_args (argparse.Namespace): The namespace object containing command-line arguments relevant to model initialization.
 
     Returns:
         model_instance (Any): The initialized or reloaded model instance.
@@ -253,36 +255,37 @@ def init_reload_model(args: argparse.Namespace) -> Any:
         ValueError: If both a new model identifier and a path to reuse a model are provided, or if the model
                     file for reuse is not found or cannot be loaded due to errors.
     """
-    if args.reuse_model and args.model:
+    if parsed_args.reuse_model and parsed_args.model:
         raise ValueError("Specify either a model to train or a model to reuse, not both.")
 
-    model = None
-    if args.model:
-        ModelClass = MODELS.get(args.model)
-        if args.hparams is None:
+    if parsed_args.model:
+        ModelClass = MODELS.get(parsed_args.model)
+        if parsed_args.hparams is None:
             # Initialize the default model if no hyperparamenters are given as argument
             model = ModelClass()
         else:
             # Parse the given hyperparameters to see if there is any valid one for the model
-            all_params = json.loads(args.hparams)
-            model_prefix = args.model + "__"  # e.g., "sklearn_Ridge__"
-            valid_params = ModelClass().get_params().keys()
+            all_params = json.loads(parsed_args.hparams)
+            model_prefix = parsed_args.model + "__"  # e.g., "sklearn_Ridge__"
 
-            # Filter parameters specific to the chosen model, stripping the model name prefix
-            model_params = {
-                param_name.split("__")[1]: value for param_name, value in all_params.items()
-                if param_name.startswith(model_prefix) and isinstance(value, (int, float, bool))
-            }
-            scalar_hparams = {
-                param_name.split("__")[1]: value
-                for param_name, value in all_params.items()
-                if param_name.startswith(model_prefix) and isinstance(value, (int, float, bool))  # TODO: Currently all string values are discarded to avoid distribution string, but in the future there may be the need to pass argument with a string value.
-            }
-            model = ModelClass(**scalar_hparams)
+            # Filter parameters specific to and valid for the chosen model, stripping the model name prefix
+            valid_params = inspect.signature(ModelClass.__init__).parameters
+
+            fixed_hparams = {param_name.split("__")[1]: value for param_name, value in all_params.items()
+                             if param_name.startswith(model_prefix)
+                             and param_name.split("__")[1] in valid_params
+                             and isinstance(value, (int, float, bool))  # TODO: Currently all string values are discarded to avoid distribution string, but in the future there may be the need to pass argument with a string value.
+                             }
+
+            # If model accepts a random_state and parsed_args.random_seed is provided, add it
+            if 'random_state' in valid_params and parsed_args.random_seed is not None:
+                fixed_hparams['random_state'] = parsed_args.random_seed
+
+            model = ModelClass(**fixed_hparams)
 
     else:  # Reload serialized model (args.reuse_model is set)
         try:
-            with open(args.reuse_model, 'rb') as file:
+            with open(parsed_args.reuse_model, 'rb') as file:
                 model = pickle.load(file)
         except (FileNotFoundError, pickle.UnpicklingError) as e:
             raise ValueError(f"Failed to load the specified model due to: {str(e)}")
@@ -383,7 +386,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     eda_fn = EDA_FNS.get(parsed_args.eda_fn)
     extract_features_fn = FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn)
     split_data_fn = SPLITTING_FNS.get(parsed_args.split_fn)
-    subsample_train_fn = SUBSAMPLE_TRAIN_FNS.get(parsed_args.subsample_train_fn)
+    hopt_subsampling_fn = HOPT_SUBSAMPLING_FNS.get(parsed_args.hopt_subsampling_fn)
     evaluate_fn = EVALUATION_FNS.get(parsed_args.evaluation_fn)
 
     # Initialize model or reload existing one
@@ -416,7 +419,6 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # Explore relationship within data
 
-
     # Split data
     if parsed_args.split_fn != "split_passthrough":
         logger.info("Computing data splits...")
@@ -426,108 +428,144 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # Distinguish between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
+        # Ignore specific warnings relating to sparse columns warnings.filterwarnings("ignore", category=FutureWarning)
+        warnings.filterwarnings("ignore", message="Allowing arbitrary scalar fill_value in SparseDtype is deprecated")
+        warnings.filterwarnings("ignore", message="X does not have valid feature names, but RBFSampler was fitted with feature names")
+        warnings.filterwarnings("ignore", message="X does not have valid feature names, but Ridge was fitted with feature names")
+        warnings.filterwarnings("ignore", message="pandas.DataFrame with sparse columns found.It will be converted to a dense numpy array.")
+
         # Construct the Transformers List Dynamically
         transformer_instances = []
         for transformer_name in parsed_args.data_transformers:
-            transformer_class = DATA_TRANSFORMERS.get(transformer_name)
-            if transformer_class:
-                transformer_instances.append((transformer_name, transformer_class()))
+            TransformerClass = DATA_TRANSFORMERS.get(transformer_name)
+            if TransformerClass is not None:
+                valid_params = inspect.signature(TransformerClass.__init__).parameters
+                # If hparams are passed in the command line arguments, filter them to find hparams valid and fixed for the current transformer
+                if parsed_args.hparams is not None:
+                    transformer_params = {pname.split('__')[1]: pvalue for pname, pvalue in json.loads(parsed_args.hparams).items()
+                                          if pname.startswith(transformer_name)
+                                          and pname.split('__')[1] in valid_params
+                                          and not isinstance(pvalue, str)}
+                else:
+                    transformer_params = {}
+                # If transformer accepts a random_state and parsed_args.random_seed is provided, add it
+                if 'random_state' in valid_params and parsed_args.random_seed is not None:
+                    transformer_params['random_state'] = parsed_args.random_seed
+                # Initialize the transformer with fixed parameters
+                transformer_instances.append((transformer_name, TransformerClass(**transformer_params)))
 
         # Define an sklearn Pipeline
         pipeline_steps = []
         pipeline_steps.extend(transformer_instances)
-        pipeline_steps.append(('model', model))
+        pipeline_steps.append((parsed_args.model, model))
 
         pipeline = Pipeline(pipeline_steps)
 
         # Set up hyperparams optimization if valid hyperparameters are provided
-        if parsed_args.hparams is None:
-            optimization_needed = False
-
-        else:
+        optimization_needed = False
+        param_distributions = {}
+        if parsed_args.hparams is not None:
             raw_param_distributions = json.loads(parsed_args.hparams)
-            param_distributions = {}
-            distr_pattern = r'^(uniform|loguniform|randint)\(\d+(\.\d+)?, \d+(\.\d+)?\)$'
 
-            for param_name, distr_str in raw_param_distributions.items():
+            distr_pattern = r'^(uniform|loguniform|randint)\(\d+(\.\d+)?, \d+(\.\d+)?\)$'
+            for estimname_paramname, distr_str in raw_param_distributions.items():
                 # Check if the parameter value is a proper "distribution" string
-                # (not well-formed distribution strings or numeric values are ignored by hypopt)
+                # (not well-formed distribution strings or numeric values are ignored by hopt)
                 if isinstance(distr_str, str) and re.match(distr_pattern, distr_str):
                     # Split the parameter name to get the component and parameter
-                    component, param_value = param_name.split("__")
+                    estimator, paramname = estimname_paramname.split("__")
                     # Check if the component is the model or one of the transformers
-                    if component == 'model' and param_value in model.get_params().keys():
-                        param_distributions[param_name] = string_to_distribution(distr_str)
-                    elif component in dict(transformer_instances) and param_value in dict(transformer_instances)[component].get_params().keys():
-                        param_distributions[param_name] = string_to_distribution(distr_str)
+                    if estimator == parsed_args.model and paramname in model.get_params().keys():
+                        param_distributions[estimname_paramname] = string_to_distribution(distr_str)
+                    elif estimator in dict(transformer_instances) and paramname in dict(transformer_instances)[estimator].get_params().keys():
+                        param_distributions[estimname_paramname] = string_to_distribution(distr_str)
 
                     optimization_needed = True
 
                 # Note: Parameters not matching the pattern are ignored
 
         # Either perform hyperparams optimization with refit=True OR just fit the model
+        cv_results_df = None
         if optimization_needed:
             # Case 1: Use predefined k-fold validation splits if no explicit validation set is provided
             if X_val is None and Y_val is None and cv_indices is not None:
                 cv = cv_indices
+                # Optionally subsample the training set and shallow copy it into X_tmp and Y_tmp for consistency with case 2
+                X_tmp, Y_tmp, cv_indices = hopt_subsampling_fn(X_train, Y_train, cv_indices=cv_indices,
+                                                                 subsampling_rate=parsed_args.hopt_subsampling_rate,
+                                                                 random_seed=parsed_args.random_seed)
                 n_folds = len(cv_indices)
-                X_train, Y_train = subsample_train_fn(X_train, Y_train, subsampling_rate=0.1, random_seed=parsed_args.random_seed)
-                # For consistency with case 2, shallow copy X_train into X_tmp and Y_train into Y_tmp
-                X_tmp = X_train
-                Y_tmp = Y_train
 
             # Case 2: Use a predefined validation set when provided, ignoring cv_indices
             elif X_val is not None and Y_val is not None and cv_indices is None:
                 # Subsample training and validation data to reduce model training time or manage computational resources
-                X_train, Y_train = subsample_train_fn(X_train, Y_train, subsampling_rate=0.1, random_seed=parsed_args.random_seed)
-                X_val, Y_val = subsample_train_fn(X_val, Y_val, random_seed=parsed_args.random_seed)
+                X_train_subsampled, Y_train_subsampled, _ = hopt_subsampling_fn(
+                    X_train,
+                    Y_train,
+                    subsampling_rate=parsed_args.hopt_subsampling_rate,
+                    random_seed=parsed_args.random_seed
+                )
+                X_val_subsampled, Y_val_subsampled, _ = hopt_subsampling_fn(
+                    X_val,
+                    Y_val,
+                    subsampling_rate=parsed_args.hopt_subsampling_rate,
+                    random_seed=parsed_args.random_seed
+                )
+
                 # Combine training and validation datasets for use in scikit-learn's model selection tools
-                X_tmp = pd.concat([X_train, X_val], ignore_index=True)
-                Y_tmp = pd.concat([Y_train, Y_val], ignore_index=True)
+                X_tmp = pd.concat([X_train_subsampled, X_val_subsampled], ignore_index=True)
+                Y_tmp = pd.concat([Y_train_subsampled, Y_val_subsampled], ignore_index=True)
 
                 # Creating one explicit fold is not possible out of the box with sklearn (cv_indices must contain at
                 # least two different train/val splits). For this reason, a custom validator PredefinedSplit was defined
                 # to allow for a single train/val split.
                 n_folds = 1
-                val_fold = [0] * len(X_train) + [1] * len(X_val)  # Indicates which samples are from the training set (0) and which are from the validation set (1)
-                cv = PredefinedSplit(test_fold=val_fold)
+                val_fold = [0] * len(X_train_subsampled) + [1] * len(X_val_subsampled)  # Indicates which samples are from the training set (0) and which are from the validation set (1)
+                del X_train_subsampled, Y_train_subsampled, X_val_subsampled, Y_val_subsampled
+                cv = PredefinedSplit(test_fold=np.array(val_fold))
 
             else:
                 raise ValueError("Only one is expected to be not None between cv_indices and (X_val, Y_val).")
 
-            logger.info(f"Optimizing model hyperparameters ({parsed_args.n_rnd_cv_samplings} samplings * {n_folds} folds and fitting the model...")
+            logger.info(f"Optimizing model hyperparameters ({parsed_args.hopt_n_rndcv_samplings} samplings * {n_folds} folds and fitting the model...")
             search = RandomizedSearchCV(pipeline,
                                         param_distributions,
-                                        n_iter=parsed_args.n_rnd_cv_samplings,
-                                        refit=True, cv=cv,
+                                        n_iter=parsed_args.hopt_n_rndcv_samplings,
+                                        refit=False,  # Avoid automatic refitting because hopt may be performed on subsampled data
+                                        cv=cv,
                                         random_state=parsed_args.random_seed,
                                         return_train_score=True,  # May slow down the execution
                                         verbose=3)
+            search.fit(X_tmp, Y_tmp)  # search.fit(convert_df_to_sparse_matrix(X_tmp), convert_df_to_sparse_matrix(Y_tmp)) for sparse fitting (debug it)
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning, module='sklearn.utils.validation')  # Silence user warning about converting sparse dataframes to dense
-                # search = search.fit(convert_df_to_sparse_matrix(X_tmp), convert_df_to_sparse_matrix(Y_tmp))  # Try to convert the whole thing to sparse (might not work with sklearn's validation)
-                search = search.fit(X_tmp, Y_tmp)
+            # Collect the cv_results_
             if hasattr(search, "cv_results_"):
                 cv_results_df = pd.DataFrame(search.cv_results_)
                 float_columns = cv_results_df.select_dtypes(include=['float']).columns
                 cv_results_df[float_columns] = cv_results_df[float_columns].round(4)
             else:
                 cv_results_df = None
-            if hasattr(search, 'best_estimator_'):
-                model = search.best_estimator_
-            else:
-                raise AttributeError("Failed to find the best estimator. The model fitting process did not complete successfully.")
 
-        else:
-            logger.info("Fitting the model...")
-            model = model.fit(X_train.to_numpy(), np.squeeze(Y_train.to_numpy()))
-            cv_results_df = None
+            # Collect the best_params_ and instantiate a new pipeline with optimized values
+            if hasattr(search, 'best_params_'):
+                best_params = search.best_params_
+
+                best_pipeline = pipeline
+                for pname, pvalue in best_params.items():
+                    step, param = pname.split('__')
+                    setattr(best_pipeline.named_steps[step], param, pvalue)
+                pipeline = best_pipeline  # Shade optimized_pipeline behind the name model for unified use in case of no hopt
+            else:
+                raise AttributeError("Failed to find the best parameters. The model fitting process did not complete successfully.")
+
+        # Fit the model (either optimized or not)
+        logger.info("Fitting the model...")
+        pipeline.fit(X_train, Y_train)
 
         # Compute model predictions
         logger.info("Computing model predictions...")
-        Y_pred = model.predict(X_val.to_numpy())  # TODO: implement sequential prediction and predict to X_test
-        Y_train_pred = model.predict(X_train.to_numpy())
+        Y_pred = pipeline.predict(X_test.to_numpy())  # TODO: implement sequential prediction and predict to X_test
+        Y_train_pred = pipeline.predict(X_train.to_numpy())
 
         Y_pred = np.rint(np.clip(Y_pred, a_min=0, a_max=None))
         Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
@@ -553,9 +591,9 @@ def main(parsed_args: argparse.Namespace) -> None:
     # Evaluate model predictions
     logger.info("Evaluating model predictions...")
     scores, figs = evaluate_fn(
-        np.squeeze(Y_val.to_numpy()),  # TODO: change to Y_test
+        np.squeeze(Y_test.to_numpy()),
         np.squeeze(Y_pred),
-        model,
+        pipeline,
         Y_test.columns.tolist(),
         np.squeeze(Y_train.to_numpy()),
         np.squeeze(Y_train_pred),
@@ -576,7 +614,7 @@ def main(parsed_args: argparse.Namespace) -> None:
 
         model_path = os.path.join(trained_models_dir, f"trained_model_{parsed_args.run_id}.pkl")
         with open(model_path, 'wb') as file:
-            pickle.dump(model, file)
+            pickle.dump(pipeline, file)
 
         if cv_results_df is not None:
             cv_results_path = os.path.join(model_summaries_dir, f"cv_results_{parsed_args.run_id}.csv")
@@ -603,6 +641,12 @@ def main(parsed_args: argparse.Namespace) -> None:
             abs_path = os.path.abspath(match)
             script_call = script_call.replace(match, abs_path)
 
+        # Format pipeline steps information
+        pipeline_steps_info = {step[0]: step[1].__class__.__name__ for step in pipeline.steps}
+
+        # Format hyperparameters for each step in the pipeline
+        pipeline_hyperparams = {step[0]: step[1].get_params() for step in pipeline.steps}
+
         # Store information as a text file. Do not use JSON because it messes up with necessary escapes.
         experiment_info = {
             "run_id": parsed_args.run_id,
@@ -613,8 +657,9 @@ def main(parsed_args: argparse.Namespace) -> None:
             "model": parsed_args.model,
             "data_transformers": parsed_args.data_transformers,
             "hparams": parsed_args.hparams,
-            "n_rnd_cv_samplings": parsed_args.n_rnd_cv_samplings,
-            "subsample_train_fn": parsed_args.subsample_train_fn,
+            "hopt_n_rndcv_samplings": parsed_args.hopt_n_rndcv_samplings,
+            "hopt_subsampling_fn": parsed_args.hopt_subsampling_fn,
+            "hopt_subsampling_rate": parsed_args.hopt_subsampling_rate,
             "reuse_model": "True" if parsed_args.reuse_model else "False",
             "preprocessing_fn": parsed_args.preprocessing_fn,
             "eda_fn": parsed_args.eda_fn,
@@ -631,9 +676,9 @@ def main(parsed_args: argparse.Namespace) -> None:
             "output_model_dir": parsed_args.output_model_dir,
             "output_reports_dir": parsed_args.output_reports_dir,
             "output_figures_dir": parsed_args.output_figures_dir,
-            "model_type": str(type(model)),
-            "initial_hyperparameters": json.loads(parsed_args.hparams) if parsed_args.hparams else "None",
-            "final_hyperparameters": model.get_params() if hasattr(model, 'get_params') else "Not Applicable",
+            "pipeline_steps_info": pipeline_steps_info,
+            "initial_hyperparameters": parsed_args.hparams,
+            "final_hyperparameters": pipeline_hyperparams,
             "optimization_performed": "True" if optimization_needed else "False",
             "performance_metrics": scores.index.tolist(),
             "script_call": " ".join(sys.argv),
@@ -655,8 +700,9 @@ if __name__ == "__main__":
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
-    parser.add_argument('--n_rnd_cv_samplings', type=int, default=5, help='Number of samplings for RandomSearchCV hyperparameter optimization')
-    parser.add_argument('--subsample_train_fn', default='subsample_train_passthrough', choices=SUBSAMPLE_TRAIN_FNS.keys(), help='Identifier for training set subsampling function')
+    parser.add_argument('--hopt_n_rndcv_samplings', type=int, default=5, help='Number of samplings for RandomSearchCV hyperparameter optimization')
+    parser.add_argument('--hopt_subsampling_fn', default='hopt_subsampling_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
+    parser.add_argument('--hopt_subsampling_rate', default=1, type=float, help='Proportion of the original training set retained for hyperparameter optimization')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
     parser.add_argument('--preprocessing_fn', default='preprocess_passthrough', choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
     parser.add_argument('--eda_fn', default='eda_passthrough', choices=EDA_FNS.keys(), help='Identifier for exploratory data analysis function')

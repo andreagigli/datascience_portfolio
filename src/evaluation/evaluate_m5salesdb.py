@@ -10,6 +10,7 @@ from pandas import DataFrame
 from scipy.stats import iqr
 from sklearn.base import BaseEstimator
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.pipeline import Pipeline
 
 
 def calculate_metrics(Y_actual: np.ndarray, Y_predicted: np.ndarray) -> Dict[str, np.ndarray]:
@@ -60,7 +61,7 @@ def evaluate(
                                   predicted values for the test set and, if provided, for the training set.
     """
     # Print model type and parameters
-    model_info = format_model_info(model)
+    model_info = format_sklearn_estimator_info(model)
     print(model_info)
 
     # Compute metrics
@@ -77,9 +78,16 @@ def evaluate(
     print(scores)
 
     # Generate scatter plot for test data
+    if len(Y) > 10:  # Limit the number of plotted datapoints
+        indices = np.random.choice(range(len(Y)), size=10, replace=False)
+        Y_sampled = Y[indices]  # Assuming Y is a pandas Series or DataFrame
+        Y_pred_sampled = Y_pred[indices]
+    else:
+        Y_sampled = Y
+        Y_pred_sampled = Y_pred
     plt.figure(figsize=(10, 6))
-    sns.scatterplot(x=Y, y=Y_pred, alpha=0.6)
-    plt.plot([Y.min(), Y.max()], [Y.min(), Y.max()], color='red', lw=2)  # Line for perfect predictions
+    sns.scatterplot(x=Y_sampled, y=Y_pred_sampled, alpha=0.6)
+    plt.plot([Y_sampled.min(), Y_sampled.max()], [Y_sampled.min(), Y_sampled.max()], color='red', lw=2)  # Line for perfect predictions
     plt.xlabel('Actual Values')
     plt.ylabel('Predicted Values')
     plt.title(f'Test: Actual vs Predicted {target_name[0]}. R2={scores.loc["R2", "Aggregated"]:.2f}')
@@ -87,9 +95,16 @@ def evaluate(
 
     # Generate scatter plot for training data if provided
     if Y_train is not None and Y_train_pred is not None:
+        if len(Y_train) > 10:  # Limit the number of plotted datapoints
+            indices = np.random.choice(range(len(Y_train)), size=10, replace=False)
+            Y_train_sampled = Y_train[indices]  # Assuming Y is a pandas Series or DataFrame
+            Y_train_pred_sampled = Y_train_pred[indices]
+        else:
+            Y_train_sampled = Y_train
+            Y_train_pred_sampled = Y_train_pred
         plt.figure(figsize=(10, 6))
-        sns.scatterplot(x=Y_train, y=Y_train_pred, alpha=0.6)
-        plt.plot([Y_train.min(), Y_train.max()], [Y_train.min(), Y_train.max()], color='red', lw=2)
+        sns.scatterplot(x=Y_train_sampled, y=Y_train_pred_sampled, alpha=0.6)
+        plt.plot([Y_train_sampled.min(), Y_train_sampled.max()], [Y_train_sampled.min(), Y_train_sampled.max()], color='red', lw=2)
         plt.xlabel('Actual Values')
         plt.ylabel('Predicted Values')
         plt.title(f'Train: Actual vs Predicted {target_name[0]}. R2={scores.loc["R2_train", "Aggregated"]:.2f}')
@@ -98,27 +113,57 @@ def evaluate(
     return scores, figs
 
 
-def format_model_info(model: BaseEstimator) -> str:
+def format_sklearn_estimator_info(estimator: BaseEstimator) -> str:
     """
-    Formats the information about the model and its parameters for better readability.
+    Formats detailed information about an estimator or pipeline, including its components and parameters,
+    for better readability. This function supports both individual estimators and pipelines consisting of
+    multiple steps (transformers and a final estimator).
 
     Args:
-        model (BaseEstimator): The model or pipeline to format information for.
+        estimator (BaseEstimator): The estimator or pipeline to format information for.
 
     Returns:
-        str: Formatted string containing the model type and parameters.
+        str: A formatted string containing detailed information about the estimator or pipeline, including
+             type, components (if any), and parameters for each component.
     """
-    model_type = f"Model Type: {model.__class__.__name__}"
-    param_lines = ["Parameters:"]
-    params = model.get_params(deep=True)
+    info_lines = []
 
-    # For each parameter, format the line with indentation
+    # Check if the estimator is a pipeline
+    if isinstance(estimator, Pipeline):
+        info_lines.append("Estimator Type: Pipeline")
+        info_lines.append("Steps:")
+        # Iterate through each step in the pipeline
+        for step_name, step_estimator in estimator.steps:
+            step_info = format_step_info(step_name, step_estimator)
+            info_lines.append(step_info)
+    else:
+        # For a single estimator (not a pipeline)
+        info_lines.append(format_step_info(estimator.__class__.__name__, estimator))
+
+    return "\n".join(info_lines)
+
+
+def format_step_info(step_name: str, step_model: BaseEstimator) -> str:
+    """
+    Formats the information about a single step in the pipeline or a single model.
+
+    Args:
+        step_name (str): The name of the step or model.
+        step_model (BaseEstimator): The model or transformer in the step.
+
+    Returns:
+        str: Formatted string containing the step or model name and parameters.
+    """
+    step_type = f"  Step: {step_name}, Model: {step_model.__class__.__name__}"
+    param_lines = ["    Parameters:"]
+    params = step_model.get_params(deep=True)
+
+    # Format each parameter with indentation
     for param, value in params.items():
-        # For readability, convert complex objects to a simplified string representation
         if isinstance(value, BaseEstimator):
             value_str = f"{value.__class__.__name__}(...)"
         else:
             value_str = repr(value)
-        param_lines.append(f"  {param}: {value_str}")
+        param_lines.append(f"      {param}: {value_str}")
 
-    return "\n".join([model_type] + param_lines)
+    return "\n".join([step_type] + param_lines)
