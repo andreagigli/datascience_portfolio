@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,6 +26,9 @@ def calculate_metrics(Y_actual: np.ndarray, Y_predicted: np.ndarray) -> Dict[str
                                          Mean Squared Error (MSE), Root Mean Squared Error (RMSE), Normalized RMSE (NRMSE),
                                          and R^2 Score (R2), each keyed by their respective names.
     """
+    Y_actual = Y_actual.squeeze()
+    Y_predicted = Y_predicted.squeeze()
+
     mae = mean_absolute_error(Y_actual, Y_predicted, multioutput="raw_values")
     mse = mean_squared_error(Y_actual, Y_predicted, multioutput="raw_values")
     rmse = np.sqrt(mse)
@@ -35,31 +38,43 @@ def calculate_metrics(Y_actual: np.ndarray, Y_predicted: np.ndarray) -> Dict[str
     return {'MAE': mae, 'MSE': mse, 'RMSE': rmse, 'NRMSE': nrmse, 'R2': r2}
 
 
-def evaluate(
-    Y: np.ndarray, 
-    Y_pred: np.ndarray, 
-    model: BaseEstimator, 
-    target_name: List[str], 
-    Y_train: Optional[np.ndarray] = None, 
-    Y_train_pred: Optional[np.ndarray] = None
-) -> Tuple[DataFrame, Dict[str, Figure]]:
+def evaluate(Y: Union[np.ndarray, pd.DataFrame],
+             Y_pred: Union[np.ndarray, pd.DataFrame],
+             model: BaseEstimator,
+             target_name: Optional[List[str]] = None,
+             Y_train: Optional[Union[np.ndarray, pd.DataFrame]] = None,
+             Y_train_pred: Optional[Union[np.ndarray, pd.DataFrame]] = None,
+             ) -> Tuple[DataFrame, Dict[str, Figure]]:
     """
     Evaluates a regression model's performance, comparing actual vs. predicted values, and generates plots for visualization.
 
     Args:
-        Y (np.ndarray): Actual target values for the test set.
-        Y_pred (np.ndarray): Predicted target values for the test set.
+        Y (Union[np.ndarray, pd.DataFrame]): Actual target values for the test set.
+        Y_pred (Union[np.ndarray, pd.DataFrame]): Predicted target values for the test set.
         model (BaseEstimator): The regression model used for predictions.
-        target_name (List[str]): List containing the name(s) of the target variable(s).
-        Y_train (Optional[np.ndarray]): Actual target values for the training set, if available.
-        Y_train_pred (Optional[np.ndarray]): Predicted target values for the training set, if available.
+        target_name (Optional[List[str]]): List containing the name(s) of the target variable(s).
+        Y_train (Optional[Union[np.ndarray, pd.DataFrame]]): Actual target values for the training set, if available.
+        Y_train_pred (Optional[Union[np.ndarray, pd.DataFrame]]): Predicted target values for the training set, if available.
 
     Returns:
         scores (DataFrame): A DataFrame containing evaluation metrics such as MAE, MSE, RMSE, NRMSE, and R2,
                             for both test and optionally for the training dataset.
-        figs (Dict[str, Figure]): A dictionary of matplotlib Figures, including scatter plots of actual vs.
+        figs (Dict[str, plt.Figure]): A dictionary of matplotlib Figures, including scatter plots of actual vs.
                                   predicted values for the test set and, if provided, for the training set.
     """
+    # Remove potentially redundant dimensions from the data
+    Y = Y.squeeze()
+    Y_pred = Y_pred.squeeze()
+    # If data is stored in Pandas DataFrames make sure the index is contiguous
+    Y = Y.reset_index(drop=True) if isinstance(Y, (pd.DataFrame, pd.Series)) else Y
+    Y_pred = Y_pred.reset_index(drop=True) if isinstance(Y_pred, (pd.DataFrame, pd.Series)) else Y_pred
+
+    if Y_train is not None and Y_train_pred is not None:
+        Y_train = Y_train.squeeze()
+        Y_train_pred = Y_train_pred.squeeze()
+        Y_train = Y_train.reset_index(drop=True) if isinstance(Y_train, (pd.DataFrame, pd.Series)) else Y_train
+        Y_train_pred = Y_train_pred.reset_index(drop=True) if isinstance(Y_train_pred, (pd.DataFrame, pd.Series)) else Y_train_pred
+
     # Print model type and parameters
     model_info = format_sklearn_estimator_info(model)
     print(model_info)
@@ -76,6 +91,10 @@ def evaluate(
     scores = pd.DataFrame.from_dict(scores_dict, orient="index", columns=columns)
     scores["Aggregated"] = scores.mean(axis=1)
     print(scores)
+
+    # Handle target_name being None
+    if target_name is None:  # It's assumed that Y is a numpy array
+        target_name = ["y" + str(i) for i in range(Y.shape[1])] if Y.ndim > 1 else ["y"]
 
     # Generate scatter plot for test data
     if len(Y) > 10:  # Limit the number of plotted datapoints

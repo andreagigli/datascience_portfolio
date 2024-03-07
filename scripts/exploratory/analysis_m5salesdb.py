@@ -426,6 +426,13 @@ def main(parsed_args: argparse.Namespace) -> None:
     else:
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
 
+    # X_train = X_train.iloc[::100]
+    # X_test = X_test.iloc[::100]
+    # X_val = X_val.iloc[::100]
+    # Y_train = Y_train.iloc[::100]
+    # Y_test = Y_test.iloc[::100]
+    # Y_val = Y_val.iloc[::100]
+
     # Distinguish between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
         # Ignore specific warnings relating to sparse columns warnings.filterwarnings("ignore", category=FutureWarning)
@@ -536,7 +543,7 @@ def main(parsed_args: argparse.Namespace) -> None:
                                         random_state=parsed_args.random_seed,
                                         return_train_score=True,  # May slow down the execution
                                         verbose=3)
-            search.fit(X_tmp, Y_tmp)  # search.fit(convert_df_to_sparse_matrix(X_tmp), convert_df_to_sparse_matrix(Y_tmp)) for sparse fitting (debug it)
+            search.fit(X_tmp.squeeze(), Y_tmp.squeeze())  # search.fit(convert_df_to_sparse_matrix(X_tmp), convert_df_to_sparse_matrix(Y_tmp)) for sparse fitting (debug it)
 
             # Collect the cv_results_
             if hasattr(search, "cv_results_"):
@@ -560,15 +567,15 @@ def main(parsed_args: argparse.Namespace) -> None:
 
         # Fit the model (either optimized or not)
         logger.info("Fitting the model...")
-        pipeline.fit(X_train, Y_train)
+        pipeline.fit(X_train.squeeze(), Y_train.squeeze())
 
         # Compute model predictions
         logger.info("Computing model predictions...")
-        Y_pred = pipeline.predict(X_test.to_numpy())  # TODO: implement sequential prediction and predict to X_test
-        Y_train_pred = pipeline.predict(X_train.to_numpy())
+        Y_pred = pipeline.predict(X_test.squeeze())  # TODO: implement sequential prediction and predict to X_test
+        Y_train_pred = pipeline.predict(X_train.squeeze())
 
-        Y_pred = np.rint(np.clip(Y_pred, a_min=0, a_max=None))
-        Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
+        # Y_pred = np.rint(np.clip(Y_pred, a_min=0, a_max=None))
+        # Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
 
     elif "tensorflow" in MODELS[parsed_args.model]:
         optimization_needed = True
@@ -591,12 +598,12 @@ def main(parsed_args: argparse.Namespace) -> None:
     # Evaluate model predictions
     logger.info("Evaluating model predictions...")
     scores, figs = evaluate_fn(
-        np.squeeze(Y_test.to_numpy()),
-        np.squeeze(Y_pred),
+        Y_test.squeeze(),
+        Y_pred,
         pipeline,
-        Y_test.columns.tolist(),
-        np.squeeze(Y_train.to_numpy()),
-        np.squeeze(Y_train_pred),
+        Y_test.columns.tolist() if isinstance(Y_test, (pd.DataFrame, pd.Series)) else None,
+        Y_train.squeeze(),
+        Y_train_pred,
     )
 
     # Save results
