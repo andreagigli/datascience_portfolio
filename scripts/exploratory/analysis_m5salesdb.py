@@ -19,6 +19,7 @@ python analysis_exampledb.py
 --eda_fn eda_m5salesdb
 --feature_extraction_fn features_m5salesdb
 --split_fn split_m5salesdb
+--prediction_fn predict_sklearn
 --evaluation_fn evaluate_m5salesdb
 --log_level INFO
 --random_seed 0
@@ -116,6 +117,11 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
 HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
     "hopt_subsampling_passthrough": lambda *args, **kwargs: args,
     "subsample_train_m5salesdb": src.data.data_m5salesdb.subsample_items,
+}
+PREDICTION_FNS: Dict[str, Callable] = {
+    "predict_zeros": lambda X_test, Y_test, model, X_train, Y_train, *args, **kwargs: (np.zeros_like(Y_test), np.zeros_like(Y_train)),
+    "predict_sklearn": lambda X_test, Y_test, model, X_train, Y_train, *args, **kwargs: (model.predict(X_test), model.predict(X_train)),
+    # Add other custom prediction functions here as needed
 }
 EVALUATION_FNS: Dict[str, Callable] = {
     "evaluate_passthrough": lambda *args, **kwargs: (pd.DataFrame(), {}),
@@ -387,6 +393,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     extract_features_fn = FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn)
     split_data_fn = SPLITTING_FNS.get(parsed_args.split_fn)
     hopt_subsampling_fn = HOPT_SUBSAMPLING_FNS.get(parsed_args.hopt_subsampling_fn)
+    predict_fn = PREDICTION_FNS.get(parsed_args.prediction_fn)
     evaluate_fn = EVALUATION_FNS.get(parsed_args.evaluation_fn)
 
     # Initialize model or reload existing one
@@ -426,14 +433,14 @@ def main(parsed_args: argparse.Namespace) -> None:
     else:
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
 
-    # X_train = X_train.iloc[::100]
-    # X_test = X_test.iloc[::100]
-    # X_val = X_val.iloc[::100]
-    # Y_train = Y_train.iloc[::100]
-    # Y_test = Y_test.iloc[::100]
-    # Y_val = Y_val.iloc[::100]
+    X_train = X_train.iloc[::100]
+    X_test = X_test.iloc[::100]
+    X_val = X_val.iloc[::100]
+    Y_train = Y_train.iloc[::100]
+    Y_test = Y_test.iloc[::100]
+    Y_val = Y_val.iloc[::100]
 
-    # Distinguish between sklearn and pytorch/tensorflow pipeline
+    # Optimize hyperparameters and train model, distinguishing between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
         # Ignore specific warnings relating to sparse columns warnings.filterwarnings("ignore", category=FutureWarning)
         warnings.filterwarnings("ignore", message="Allowing arbitrary scalar fill_value in SparseDtype is deprecated")
@@ -571,8 +578,13 @@ def main(parsed_args: argparse.Namespace) -> None:
 
         # Compute model predictions
         logger.info("Computing model predictions...")
-        Y_pred = pipeline.predict(X_test.squeeze())  # TODO: implement sequential prediction and predict to X_test
-        Y_train_pred = pipeline.predict(X_train.squeeze())
+        Y_pred, Y_train_pred = predict_fn(
+            X_test.squeeze(),
+            Y_test.squeeze(),  # Only relevant for prediction_fn = predict_zeros
+            pipeline,
+            X_train.squeeze(),
+            Y_train.squeeze(),  # Only relevant for prediction_fn = predict_zeros
+        )
 
         # Y_pred = np.rint(np.clip(Y_pred, a_min=0, a_max=None))
         # Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
@@ -718,6 +730,7 @@ if __name__ == "__main__":
     parser.add_argument('--split_ratio', type=str, help='Ratio for splitting data')
     parser.add_argument('--n_folds', type=int, help='Number of folds for k-fold cross-validation')
     parser.add_argument('--stratified_kfold', action='store_true', help='Whether to perform stratified (for clf) or standard (for reg or clf) k-fold cross-validation')
+    parser.add_argument('--prediction_fn', default='predict_zeros', help='Identifier for prediction function')
     parser.add_argument('--evaluation_fn', default='evaluate_passthrough', choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
     parser.add_argument('--log_level', type=str, default='INFO', help='Logging level (e.g., "INFO", "DEBUG")')
     parser.add_argument('--random_seed', type=int, default=None, help='Seed for random number generators for reproducibility')

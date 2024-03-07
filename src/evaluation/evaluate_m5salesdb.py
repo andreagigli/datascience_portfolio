@@ -97,8 +97,10 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
         target_name = ["y" + str(i) for i in range(Y.shape[1])] if Y.ndim > 1 else ["y"]
 
     # Generate scatter plot for test data
-    if len(Y) > 10:  # Limit the number of plotted datapoints
-        indices = np.random.choice(range(len(Y)), size=10, replace=False)
+    n_scatter_samples = 100
+
+    if len(Y) > n_scatter_samples:  # Limit the number of plotted datapoints
+        indices = np.random.choice(range(len(Y)), size=n_scatter_samples, replace=False)
         Y_sampled = Y[indices]  # Assuming Y is a pandas Series or DataFrame
         Y_pred_sampled = Y_pred[indices]
     else:
@@ -114,8 +116,8 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
 
     # Generate scatter plot for training data if provided
     if Y_train is not None and Y_train_pred is not None:
-        if len(Y_train) > 10:  # Limit the number of plotted datapoints
-            indices = np.random.choice(range(len(Y_train)), size=10, replace=False)
+        if len(Y_train) > n_scatter_samples:  # Limit the number of plotted datapoints
+            indices = np.random.choice(range(len(Y_train)), size=n_scatter_samples, replace=False)
             Y_train_sampled = Y_train[indices]  # Assuming Y is a pandas Series or DataFrame
             Y_train_pred_sampled = Y_train_pred[indices]
         else:
