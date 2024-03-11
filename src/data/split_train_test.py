@@ -1,6 +1,6 @@
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 
-import numpy as np
+from numpy import ndarray
 from pandas import DataFrame
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 
@@ -13,7 +13,11 @@ def split_data(
     test_prc: int = 20,
     n_folds: Optional[int] = None,
     stratified: bool = False
-) -> Tuple[DataFrame, DataFrame, Optional[DataFrame], Optional[DataFrame], DataFrame, DataFrame, Optional[List[Tuple[np.ndarray, np.ndarray]]]]:
+    ) -> Tuple[DataFrame, DataFrame,
+               Optional[DataFrame], Optional[DataFrame],
+               DataFrame, DataFrame,
+               Optional[List[Tuple[ndarray, ndarray]]],
+               Optional[Dict[str, any]]]:
     """
     Splits the dataset into training, validation (if applicable), and test sets, optionally providing cross-validation indices.
 
@@ -34,6 +38,7 @@ def split_data(
         X_test (DataFrame): Test set features.
         Y_test (DataFrame): Test set target variable.
         cv_indices (Optional[List[Tuple[np.ndarray, np.ndarray]]]): List of tuples containing train and validation indices for each fold, if `n_folds` is not None. Useful for cross-validation.
+        aux_split_params (Dict[str, any]): An empty dictionary, included for conformity with other splitting functions that may return additional optional parameters.
     """
     assert train_prc + test_prc == 100, "Sum of ratios must be 100"
 
@@ -57,4 +62,6 @@ def split_data(
     X_val = None
     Y_val = None
 
-    return X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices
+    aux_split_params = None
+
+    return X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params

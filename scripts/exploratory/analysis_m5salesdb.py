@@ -58,7 +58,6 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.svm import SVC
 from typing import Dict, Any, Union, Optional, Type, Callable
 
-import src.models.custom_linear_regressor
 import src.data.data_m5salesdb
 import src.data.load_exampledb
 import src.data.split_train_val_test
@@ -67,9 +66,11 @@ import src.eda.eda_m5salesdb
 import src.evaluation.evaluate_exampledb
 import src.evaluation.evaluate_m5salesdb
 import src.features.features_m5salesdb
+import src.models.custom_linear_regressor
+import src.prediction.predict_m5salesdb
+
 from src.optimization.custom_sk_validators import PredefinedSplit
 from src.utils.my_dataframe import convert_df_to_sparse_matrix
-
 from src.utils.my_os import ensure_dir_exists
 
 
@@ -104,7 +105,7 @@ FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_m5salesdb": src.features.features_m5salesdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
-    "split_passthrough": lambda *args, **kwargs: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), []),
+    "split_passthrough": lambda *args, **kwargs: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], {}),
     "split_train_val_test": src.data.split_train_val_test.split_data,
     "split_train_test": src.data.split_train_test.split_data,
     "split_m5salesdb": src.data.data_m5salesdb.split_data,
@@ -119,9 +120,9 @@ HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
     "subsample_train_m5salesdb": src.data.data_m5salesdb.subsample_items,
 }
 PREDICTION_FNS: Dict[str, Callable] = {
-    "predict_zeros": lambda X_test, Y_test, model, X_train, Y_train, *args, **kwargs: (np.zeros_like(Y_test), np.zeros_like(Y_train)),
-    "predict_sklearn": lambda X_test, Y_test, model, X_train, Y_train, *args, **kwargs: (model.predict(X_test), model.predict(X_train)),
-    # Add other custom prediction functions here as needed
+    "predict_zeros": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (np.zeros_like(Y_test), np.zeros_like(Y_train)),  # Note: complex signature for consistency across prediction_fns
+    "predict_sklearn": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (model.predict(X_test), model.predict(X_train)),
+    "predict_m5salesdb": src.prediction.predict_m5salesdb.predict,
 }
 EVALUATION_FNS: Dict[str, Callable] = {
     "evaluate_passthrough": lambda *args, **kwargs: (pd.DataFrame(), {}),
@@ -399,12 +400,8 @@ def main(parsed_args: argparse.Namespace) -> None:
     # Initialize model or reload existing one
     model = init_reload_model(parsed_args)
 
-    if parsed_args.precomputed_features_path:
-        # Load the pre-computed features
-        X = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "X.pkl"))
-        Y = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "Y.pkl"))
-
-    else:
+    # Load data and extract features, or reload previously computed features
+    if parsed_args.precomputed_features_path is None:
         # Load data
         logger.info("Loading data and extracting features...")
         sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
@@ -417,6 +414,7 @@ def main(parsed_args: argparse.Namespace) -> None:
         X, Y = extract_features_fn(sales)  # X and Y are expected to be pd.DataFrame
 
         if parsed_args.save_output:
+            logger.info("Storing computed features...")
             dbname = os.path.basename(parsed_args.data_path.rstrip('/'))  # Extracts filename from data_path without extension
             output_dir = os.path.join(parsed_args.output_data_dir, dbname)
             os.makedirs(output_dir, exist_ok=True)
@@ -424,21 +422,35 @@ def main(parsed_args: argparse.Namespace) -> None:
             Y.to_pickle(os.path.join(output_dir, "Y.pkl"))
         del sales, sell_prices, calendar
 
-    # Explore relationship within data
+    else:
+        # Reload the pre-computed features
+        X = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "X.pkl"))
+        Y = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "Y.pkl"))
+
+    # TODO: Explore relationships within features and between features and targets
+
+    # TODO: comment out this further dataset subsampling (only here for faster debug)
+    keep_n_items_per_category = 2
+    filtered_indices = []
+    for cat_col in ['cat_id_FOODS', 'cat_id_HOBBIES', 'cat_id_HOUSEHOLD']:
+        category_items = X[X[cat_col] == 1]
+        # Get unique item_ids in the current category
+        unique_items = category_items['item_id'].unique()
+        sampled_items = np.random.choice(unique_items, size=min(len(unique_items), keep_n_items_per_category),
+                                         replace=False)
+        for item_id in sampled_items:
+            item_indices = category_items[category_items['item_id'] == item_id].index
+            filtered_indices.extend(item_indices.tolist())
+    X = X.loc[filtered_indices].reset_index(drop=True)
+    Y = Y.loc[filtered_indices].reset_index(drop=True)
 
     # Split data
+    aux_split_params = {}
     if parsed_args.split_fn != "split_passthrough":
         logger.info("Computing data splits...")
-        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = split_data_fn(X, Y)
+        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params = split_data_fn(X, Y)
     else:
-        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
-
-    X_train = X_train.iloc[::100]
-    X_test = X_test.iloc[::100]
-    X_val = X_val.iloc[::100]
-    Y_train = Y_train.iloc[::100]
-    Y_test = Y_test.iloc[::100]
-    Y_val = Y_val.iloc[::100]
+        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
 
     # Optimize hyperparameters and train model, distinguishing between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
@@ -576,18 +588,20 @@ def main(parsed_args: argparse.Namespace) -> None:
         logger.info("Fitting the model...")
         pipeline.fit(X_train.squeeze(), Y_train.squeeze())
 
-        # Compute model predictions
-        logger.info("Computing model predictions...")
-        Y_pred, Y_train_pred = predict_fn(
-            X_test.squeeze(),
-            Y_test.squeeze(),  # Only relevant for prediction_fn = predict_zeros
-            pipeline,
-            X_train.squeeze(),
-            Y_train.squeeze(),  # Only relevant for prediction_fn = predict_zeros
-        )
+        model = pipeline  # For consistency with other libraries, simply call the Sklearn pipeline "model"
 
-        # Y_pred = np.rint(np.clip(Y_pred, a_min=0, a_max=None))
-        # Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
+        # # Compute model predictions
+        # logger.info("Computing model predictions...")
+        # Y_pred, Y_train_pred = predict_fn(
+        #     X_test.squeeze(),
+        #     Y_test.squeeze(),  # Only relevant for prediction_fn = predict_zeros
+        #     pipeline,
+        #     X_train.squeeze(),
+        #     Y_train.squeeze(),  # Only relevant for prediction_fn = predict_zeros
+        # )
+        #
+        # # Y_pred = np.rint(np.clip(Y_pred, a_min=0, a_max=None))
+        # # Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
 
     elif "tensorflow" in MODELS[parsed_args.model]:
         optimization_needed = True
@@ -607,12 +621,23 @@ def main(parsed_args: argparse.Namespace) -> None:
         Y_train_pred = None
         cv_results_df = None
 
+    # Compute model predictions
+    logger.info("Computing model predictions...")
+    Y_pred, Y_train_pred = predict_fn(
+        model,
+        X_test.squeeze(),
+        Y_test.squeeze(),  # Only relevant for prediction_fn = predict_zeros
+        X_train.squeeze(),
+        Y_train.squeeze(),  # Only relevant for prediction_fn = predict_zeros
+        **aux_split_params,
+    )
+
     # Evaluate model predictions
     logger.info("Evaluating model predictions...")
     scores, figs = evaluate_fn(
         Y_test.squeeze(),
         Y_pred,
-        pipeline,
+        model,
         Y_test.columns.tolist() if isinstance(Y_test, (pd.DataFrame, pd.Series)) else None,
         Y_train.squeeze(),
         Y_train_pred,
@@ -633,7 +658,7 @@ def main(parsed_args: argparse.Namespace) -> None:
 
         model_path = os.path.join(trained_models_dir, f"trained_model_{parsed_args.run_id}.pkl")
         with open(model_path, 'wb') as file:
-            pickle.dump(pipeline, file)
+            pickle.dump(model, file)
 
         if cv_results_df is not None:
             cv_results_path = os.path.join(model_summaries_dir, f"cv_results_{parsed_args.run_id}.csv")
@@ -660,11 +685,19 @@ def main(parsed_args: argparse.Namespace) -> None:
             abs_path = os.path.abspath(match)
             script_call = script_call.replace(match, abs_path)
 
-        # Format pipeline steps information
-        pipeline_steps_info = {step[0]: step[1].__class__.__name__ for step in pipeline.steps}
-
-        # Format hyperparameters for each step in the pipeline
-        pipeline_hyperparams = {step[0]: step[1].get_params() for step in pipeline.steps}
+        # Format model steps' information and hyperparameters
+        if "sklearn" in MODELS.get(parsed_args.model).__module__:
+            model_steps_info = {step[0]: step[1].__class__.__name__ for step in model.steps}
+            final_hyperparams = {step[0]: step[1].get_params() for step in model.steps}
+        elif "tensorflow" in MODELS[parsed_args.model]:
+            model_steps_info = None  # TODO
+            final_hyperparams = None  # TODO
+        elif "torch" in MODELS[parsed_args.model]:
+            model_steps_info = None  # TODO
+            final_hyperparams = None  # TODO
+        else:
+            model_steps_info = None  # TODO
+            final_hyperparams = None  # TODO
 
         # Store information as a text file. Do not use JSON because it messes up with necessary escapes.
         experiment_info = {
@@ -695,9 +728,9 @@ def main(parsed_args: argparse.Namespace) -> None:
             "output_model_dir": parsed_args.output_model_dir,
             "output_reports_dir": parsed_args.output_reports_dir,
             "output_figures_dir": parsed_args.output_figures_dir,
-            "pipeline_steps_info": pipeline_steps_info,
+            "model_steps_info": model_steps_info,
             "initial_hyperparameters": parsed_args.hparams,
-            "final_hyperparameters": pipeline_hyperparams,
+            "final_hyperparameters": final_hyperparams,
             "optimization_performed": "True" if optimization_needed else "False",
             "performance_metrics": scores.index.tolist(),
             "script_call": " ".join(sys.argv),

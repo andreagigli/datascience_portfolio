@@ -35,6 +35,30 @@ def convert_df_to_sparse_matrix(df: pd.DataFrame, fill_value: Union[int, float] 
     return sparse_matrix
 
 
+def convert_to_dataframe(data: Union[np.ndarray, pd.DataFrame, pd.Series], prefix: str) -> pd.DataFrame:
+    """
+    Converts numpy arrays or pandas Series to a DataFrame with generated column names.
+
+    Args:
+        data: The input data to convert.
+        prefix: The prefix for column names ('X' for features, 'Y' for targets).
+
+    Returns:
+        A pandas DataFrame representation of the input data.
+    """
+    if isinstance(data, np.ndarray):
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+        col_names = [f'{prefix}{i}' for i in range(data.shape[1])]
+        return pd.DataFrame(data, columns=col_names)
+    elif isinstance(data, pd.Series):
+        return pd.DataFrame(data, columns=[f'{prefix}0'])
+    elif isinstance(data, pd.DataFrame):
+        return data
+    else:
+        raise ValueError("Unsupported data type for conversion.")
+
+
 def downcast(df):
     """
     Optimizes a DataFrame's memory usage by downcasting numeric types and converting strings to categories where appropriate.

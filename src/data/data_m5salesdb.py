@@ -5,7 +5,7 @@ import re
 import warnings
 
 from pandas import DataFrame
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 
 from src.utils.my_dataframe import downcast
 
@@ -393,38 +393,63 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     return sales
 
 
-def split_data(X: DataFrame, Y: DataFrame) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, Optional[List[Tuple[np.ndarray, np.ndarray]]]]:
+def split_data(X: pd.DataFrame,
+               Y: pd.DataFrame,
+               look_back_days: int = 365
+               ) -> Tuple[pd.DataFrame, pd.DataFrame,
+                          pd.DataFrame, pd.DataFrame,
+                          pd.DataFrame, pd.DataFrame,
+                          Optional[Dict[str, any]],
+                          Optional[Dict[str, any]]]:
     """
-    Splits the dataset into training, validation, and test sets based on the sample's day.
-    The training set includes data from day 1 until 139, the validation set data from
+    Splits the dataset into training, validation, and an extended test set to accommodate sequential
+    prediction needs. The training data covers days 1 - 1911, the validation set 1912 - 1940, the test set 1941 - 1969.
+    The first day of the test set (1941) includes the number of items sold that day (in "sold"), whereas the following
+    days will contain a zero by default, as that value must be predicted.
+
+    The training set is used for model training, the validation set for model tuning and validation, and
+    the extended test set for conducting sequential predictions where each day's forecast can be informed
+    by the actual or predicted sales data from preceding days.
+
+    Because the multi-day prediction problem is to be solved in a sequential way, the test set is extended backward to
+    include a specified number of look-back days to enable feature computation for days 1942 - 1969, that depend on the
+    model prediction of "sold" and on historical values of "sold" (such as lagged or rolling window features).
 
     Args:
-        X (DataFrame): DataFrame containing the features.
-        Y (DataFrame): DataFrame containing the target variable.
+        X (pd.DataFrame): DataFrame containing the features, with 'd' indicating the day.
+        Y (pd.DataFrame): DataFrame containing the target variable, aligned with X.
+        look_back_days (int): Number of days prior to the test period to include in the extended test set for feature computation.
 
     Returns:
-        X_train (DataFrame): Training set features.
-        Y_train (DataFrame): Training set target variable.
-        X_val (DataFrame): Validation set features.
-        Y_val (DataFrame): Validation set target variable.
-        X_test (DataFrame): Test set features.
-        Y_test (DataFrame): Test set target variable.
-        cv_indices (List[Tuple[np.ndarray, np.ndarray]]): Placeholder for cross-validation indices, indicating no cross-validation indices are provided in this function.
+        X_train (pd.DataFrame): Features for the training set.
+        Y_train (pd.DataFrame): Target variable for the training set.
+        X_val (pd.DataFrame): Features for the validation set.
+        Y_val (pd.DataFrame): Target variable for the validation set.
+        X_test_extended (pd.DataFrame): Features for the extended test set, including the look-back period for feature computation and the actual prediction period.
+        Y_test (pd.DataFrame): Target variable for the actual test period, not including the look-back days.
+        aux_split_params (Optional[Dict[str, any]]): Additional parameters like 'start_day_for_prediction' that may be useful for prediction.
     """
+    # Define indices for the initial split
     idx_train = X["d"] < 1912
     idx_val = (X["d"] >= 1912) & (X["d"] < 1941)
-    idx_test = X["d"] >= 1941
+    idx_test = X["d"] >= 1941 - look_back_days  # Extend the test set back by `look_back_days`
 
+    # Perform the initial split
     X_train = X.loc[idx_train].reset_index(drop=True)
     Y_train = Y.loc[idx_train].reset_index(drop=True)
     X_val = X.loc[idx_val].reset_index(drop=True)
     Y_val = Y.loc[idx_val].reset_index(drop=True)
-    X_test = X.loc[idx_test].reset_index(drop=True)
-    Y_test = Y.loc[idx_test].reset_index(drop=True)
+    X_test_extended = X.loc[idx_test].reset_index(drop=True)
+    Y_test = Y.loc[X["d"] >= 1941].reset_index(drop=True)  # Y_test corresponds to the actual test period without the look-back days
 
     cv_indices = None
 
-    return X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices
+    # Prepare optional returns with additional information
+    aux_split_params = {
+        'start_day_for_prediction': 1941  # Day from which "actual" predictions start, after the look-back period
+    }
+
+    return X_train, Y_train, X_val, Y_val, X_test_extended, Y_test, cv_indices, aux_split_params
 
 
 def subsample_items(X: pd.DataFrame, Y: pd.DataFrame, cv_indices: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None, subsampling_rate: float = 1.0, random_seed: int = 42) -> Tuple[

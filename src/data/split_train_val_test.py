@@ -1,7 +1,21 @@
+from typing import Optional, Dict, Tuple, List
+
+from numpy import ndarray
+from pandas import DataFrame
 from sklearn.model_selection import train_test_split
 
 
-def split_data(X, Y, random_seed=None, train_prc=70, val_prc=15, test_prc=15):
+def split_data(X: DataFrame,
+               Y: DataFrame,
+               random_seed: Optional[int] = None,
+               train_prc: int = 70,
+               val_prc: int = 15,
+               test_prc: int = 15
+               ) -> Tuple[DataFrame, DataFrame,
+                          Optional[DataFrame], Optional[DataFrame],
+                          DataFrame, DataFrame,
+                          Optional[List[Tuple[ndarray, ndarray]]],
+                          Optional[Dict[str, any]]]:
     """
     Splits the dataset into training, validation, and test sets based on specified percentages.
 
@@ -21,6 +35,7 @@ def split_data(X, Y, random_seed=None, train_prc=70, val_prc=15, test_prc=15):
         X_test (DataFrame): Test set features.
         Y_test (DataFrame): Test set target variable.
         cv_indices (None): Placeholder for cross-validation indices, indicating no cross-validation indices are provided in this function.
+        aux_split_params (Dict[str, any]): An empty dictionary, included for conformity with other splitting functions that may return additional optional parameters.
     """
     assert train_prc + val_prc + test_prc == 100, "Sum of ratios must be 100"
 
@@ -34,4 +49,6 @@ def split_data(X, Y, random_seed=None, train_prc=70, val_prc=15, test_prc=15):
 
     cv_indices = None
 
-    return X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices
+    aux_split_params = None
+
+    return X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params

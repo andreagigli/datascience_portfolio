@@ -133,7 +133,7 @@ def extract_features(sales: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     # Drop useless features
     print("Drop useless columns")
-    sales = sales.drop(columns=["date", "wm_yr_wk", "weekday", "sold"])
+    sales = sales.drop(columns=["date", "wm_yr_wk", "weekday"])
 
     # TODO: visualize potential dependencies between features and target variable
 
