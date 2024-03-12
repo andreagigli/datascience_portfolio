@@ -1,7 +1,9 @@
 # ML and Data Science Portfolio
 
 ## Description
-A portfolio of machine learning and data science projects using my own ML and Data Science Python package. Each branch investigates a different data science task or application domain. 
+A portfolio of machine learning and data science projects using my own ML and Data Science Python package. 
+Each branch investigates a different data science task or application domain. 
+Different data science projects are explored in distinct branches.
 
 ## Project Structure
 
