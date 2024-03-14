@@ -1,102 +1,103 @@
 import numpy as np
 import pandas as pd
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Tuple, Dict
 
 
 def predict(model: Callable,
             X_test: pd.DataFrame,
             Y_test: Optional[Union[pd.DataFrame, pd.Series]],
-            start_day: int,
-            extract_features_fn: Callable,
-            *args, **kwargs) -> pd.DataFrame:
+            X_train: pd.DataFrame,
+            Y_train: Optional[Union[pd.DataFrame, pd.Series]],
+            *args, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Dict[str, any]]]:
     """
-    Splits the dataset into training, validation, and an extended test set to accommodate sequential prediction needs.
-    The training data covers days 1 - 1911, the validation set spans days 1912 - 1940, and the test set extends from
-    day 1941 to day 1969. The "sold" column for the first day of the test set (day 1941) includes actual sales figures,
-    while the following days (1942 - 1969) initially have their "sold" values set to zero, pending prediction.
-
-    The training set is utilized for model training, the validation set for model tuning and validation, and the
-    extended test set for conducting sequential predictions. Each day's forecast within the prediction period can
-    be informed by the actual or predicted sales data from preceding days, incorporating dynamic feature recalculation.
-
-    Because the prediction problem requires a sequential approach, the test set is extended backward to include a
-    specified number of look-back days. This extension facilitates the computation of features for days 1942 - 1969
-    that depend on both the model's "sold" predictions and historical sales data, enabling the use of lagged or
-    rolling window features.
+    Performs sequential predictions on the test dataset, with optional predictions for training and validation sets.
+    The function uses the model to compute the 'sold' for days greater than the specified start day. It then
+    recalculates features on the next day based on the predicted 'sold' value. The function also supports making
+    predictions on the training and validation datasets if provided via kwargs.
 
     Args:
-        X (pd.DataFrame): DataFrame containing features, with 'd' indicating the day.
-        Y (pd.DataFrame): DataFrame containing the target variable, aligned with X.
-        look_back_days (int): Number of days prior to the test period included in the extended test set for feature computation.
+        model (Callable): The trained prediction model.
+        X_test (pd.DataFrame): Test set features with 'id' and 'd' columns, and possibly 'sold' values to be updated.
+        Y_test (Optional[Union[pd.DataFrame, pd.Series]]): Actual target values for the test set, used for evaluation if provided.
+        X_train (pd.DataFrame): Training set features.
+        Y_train (Optional[Union[pd.DataFrame, pd.Series]]): Actual target values for the training set.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments, which may include:
+                  - "start_day_for_prediction" (int): The first day in X_test to start making predictions for.
+                  - "extract_features_fn" (Callable): Function to dynamically extract features after each prediction.
+                  - "X_val" (pd.DataFrame): Optional validation set features.
 
     Returns:
-        X_train (pd.DataFrame): Features for the training set.
-        Y_train (pd.DataFrame): Target variable for the training set.
-        X_val (pd.DataFrame): Features for the validation set.
-        Y_val (pd.DataFrame): Target variable for the validation set.
-        X_test_extended (pd.DataFrame): Features for the extended test set, including the look-back period for feature computation and the actual prediction period.
-        Y_test (pd.DataFrame): Target variable for the actual test period, excluding the look-back days.
-        aux_split_params (Optional[Dict[str, any]]): Additional parameters like 'start_day_for_prediction' that may be useful for prediction.
+        Y_pred (np.ndarray): Array of predicted 'sold' values for the test set.
+        Y_train_pred (np.ndarray): Array of predicted 'sold' values for the training set.
+        optional_predictions (Optional[Dict[str, np.ndarray]]): Dictionary containing additional prediction arrays,
+                                                                e.g., predictions for the validation set ("Y_val_pred").
+
     """
     if not {'id', 'd', 'sold'}.issubset(X_test.columns):
         raise ValueError("X_test must include 'id', 'd', and 'sold' columns.")
 
-    if not kwargs.get("start_day_for_prediction"):
-        raise ValueError("The kwargs must include the argument 'start_day_for_prediction'")
+    if kwargs.get("start_day_for_prediction") is None:
+        raise ValueError("The kwargs must include the argument 'start_day_for_prediction'.")
 
-    Y_pred = pd.DataFrame(columns=['id', 'd', 'sold_pred'])
+    if kwargs.get("extract_features_fn") is None:
+        raise ValueError("The kwargs must include the argument 'extract_features_fn'.")
+
+    # Initialize variables for sequential prediction
     start_day_for_prediction = kwargs["start_day_for_prediction"]
+    extract_features_fn = kwargs["extract_features_fn"]
+    Y_pred = X_test.loc[X_test["d"] >= start_day_for_prediction, ["id", "d"]].copy()  # Y_pred has auxiliary fields to align with X_test
+    Y_pred["sold"] = 0
 
-    # Iterate over days from start_day to the last day in X_test
+    # Perform sequential prediction starting from start_day_for_prediction until the second-last day in X_test
     for day in sorted(X_test.loc[X_test["d"] >= start_day_for_prediction, "d"].unique())[:-1]:
+        print(f"Performing sequential prediction for day {day}")
+
         # Select rows for the current day
         day_data = X_test[X_test['d'] == day]
 
         # Make predictions for all items on the current day
         predictions = model.predict(day_data.squeeze())
+        predictions = np.rint(np.clip(predictions, a_min=0, a_max=None))
 
         # Determine the next available day in the dataset
-        current_day_index = list(sorted(X_test["d"].unique())).index(day)
-        next_day = sorted(X_test["d"].unique())[current_day_index + 1]
+        next_day = min(d for d in sorted(X_test['d'].unique()) if d > day)
         next_day_data = X_test[X_test['d'] == next_day]
 
-        # Check if the items are in the same order for both day and next_day
-        if (not next_day_data.empty and
-                len(next_day_data) == len(predictions) and
-                all(day_data['id'].values == next_day_data['id'].values)
-        ):
-            # Directly update the 'sold' values for next_day in X_test
-            X_test.loc[X_test['d'] == next_day, 'sold'] = predictions
-        else:
-            # If the items are not aligned or if the lengths do not match, raise an error
+        # Attribute the predicted "sold" value to Y_pred.loc[Y_pred["d"]==day, "sold"] and to X_test.loc[X_test["d"]==next_day, "sold"].
+        # Note that Y_pred will have a zero on the last day because the "sold" relative to the last day is actually stored in Y_pred.loc[Y_pred["d"]==second_last_day, "sold"]
+        if any(day_data['id'].values != next_day_data['id'].values):
+            # Preliminary check if the items "id" appears in the same order for both day and next_day. If not, it won't
+            # be possible to assign the predicted sold to the next_day (TODO: implement a proper mapping to do so, in case).
             raise ValueError(f"Items are not aligned between day {day} and next day {next_day}")
+        else:
+            Y_pred.loc[Y_pred['d'] == day, 'sold'] = predictions
+            X_test.loc[X_test['d'] == next_day, 'sold'] = predictions
 
-        # if not next_day_data.empty and len(next_day_data) == len(predictions):
-        #     # Attempt to align the items based on 'id', ensuring predictions match the correct items
-        #     try:
-        #         # Create a temporary DataFrame with predictions and corresponding 'id's from day_data
-        #         pred_df = pd.DataFrame({'id': day_data['id'], 'sold_pred': predictions})
-        #
-        #         # Reindex the pred_df to match the order of 'id's in next_day_data
-        #         pred_df = pred_df.set_index('id').reindex(index=next_day_data['id']).reset_index()
-        #
-        #         # Verify that the reindexing covers all ids by checking for NaNs in 'sold_pred'
-        #         if pred_df['sold_pred'].isnull().any():
-        #             raise ValueError(
-        #                 f"Reindexing failed to cover all items for day {next_day}. Missing predictions for some items.")
-        #
-        #         # Update 'sold' values in X_test for next_day using the aligned predictions
-        #         X_test.loc[X_test['d'] == next_day, 'sold'] = pred_df['sold_pred'].values
-        #     except Exception as e:
-        #         # Handle exceptions related to reindexing or updating
-        #         print(f"An error occurred while processing day {day} to {next_day}: {e}")
-        # else:
-        #     # If lengths do not match or next_day_data is empty, skipping update
-        #     raise ValueError(f"Skipping update from day {day} to {next_day} due to mismatched lengths or empty data.")
+        # Extract features for "next_day"
+        next_day_features, _ = extract_features_fn(X_test.loc[X_test["d"] <= next_day, :], extract_features_only_for_these_days=[next_day])
 
-        # # TODO: Extract features for all items on the current day
-        # next_day_features, _ = extract_features_fn(X_test.loc[X_test["d"] <= next_day, :], *args, **kwargs)
-        # X_test[X_test['d'] == next_day] = next_day_features
+        # Override the newly computed features for "next_day" to the values currently in X_test (only the values that
+        # depend on "sold" will be changed).
+        if any(X_test.loc[X_test['d'] == next_day, "id"] != next_day_features['id'].values):
+            # Ensure the indices match between 'X_test' for 'next_day' and 'next_day_features' before updating
+            raise ValueError(f"Items are not aligned between the original features of day {next_day} and the newly computed ones")
+        else:
+            # Align the indices of the newly computed features with the rows they will be replacing within X_test
+            next_day_features.index = X_test.loc[X_test['d'] == next_day, :].index
+            X_test.loc[X_test['d'] == next_day, :] = next_day_features
 
+    # Strip the Y_pred of the accessory columns
+    Y_pred = Y_pred["sold"].values
 
-    return Y_pred.reset_index(drop=True)
+    # For model assment purposes, also predict the training set and the validation sets (the Kaggle challenge doesn't provide Y_test)
+    Y_train_pred = model.predict(X_train.squeeze())
+    Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
+
+    optional_predictions = None
+    if kwargs.get("X_val") is not None and kwargs.get("Y_val") is not None:
+        Y_val_pred = model.predict(kwargs.get("X_val").squeeze())
+        Y_val_pred = np.rint(np.clip(Y_val_pred, a_min=0, a_max=None))
+        optional_predictions = {"Y_val_pred": Y_val_pred, "Y_val": kwargs.get("Y_val")}
+
+    return Y_pred, Y_train_pred, optional_predictions

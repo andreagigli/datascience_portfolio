@@ -7,14 +7,13 @@ Example shell calls:
 
 python analysis_exampledb.py
 --data_path ../../data/external/m5salesdb/
---precomputed_features_path ../../data/processed/m5salesdb_debug/
 --data_loading_fn load_m5salesdb
---model sklearn_Ridge
---data_transformers sklearn_RBFSampler
---hparams "{\"sklearn_Ridge__alpha\": \"loguniform(0.01, 10)\", \"sklearn_RBFSampler__gamma\": \"loguniform(0.01, 10)\", \"sklearn_RBFSampler__n_components\": 300}"
+--precomputed_features_path ../../data/processed/m5salesdb_debug/
+--model sklearn_HistGradientBoostingRegressor
+--hparams "{\"sklearn_HistGradientBoostingRegressor__learning_rate\": \"loguniform(0.01, 0.3)\", \"sklearn_HistGradientBoostingRegressor__max_depth\": \"randint(3, 30)\", \"sklearn_HistGradientBoostingRegressor__min_samples_leaf\": \"randint(1, 20)\"}"
 --hopt_n_rndcv_samplings 10
 --hopt_subsampling_fn subsample_train_m5salesdb
---hopt_subsampling_rate 0.1
+--hopt_subsampling_rate 1.0
 --preprocessing_fn preprocess_m5salesdb
 --eda_fn eda_m5salesdb
 --feature_extraction_fn features_m5salesdb
@@ -395,16 +394,21 @@ def main(parsed_args: argparse.Namespace) -> None:
     split_data_fn = SPLITTING_FNS.get(parsed_args.split_fn)
     hopt_subsampling_fn = HOPT_SUBSAMPLING_FNS.get(parsed_args.hopt_subsampling_fn)
     predict_fn = PREDICTION_FNS.get(parsed_args.prediction_fn)
+    aux_predict_params = {}
     evaluate_fn = EVALUATION_FNS.get(parsed_args.evaluation_fn)
+    aux_eval_params = {}
 
     # Initialize model or reload existing one
     model = init_reload_model(parsed_args)
+
+    # Save the extract_feature_fn into the predict parameters as it may be necessary for some custom prediction function, such as sequential prediction
+    aux_predict_params["extract_features_fn"] = extract_features_fn
 
     # Load data and extract features, or reload previously computed features
     if parsed_args.precomputed_features_path is None:
         # Load data
         logger.info("Loading data and extracting features...")
-        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
+        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)
         sales = preprocess_fn(sales, sell_prices, calendar)
 
         # # Exploratory data analysis
@@ -429,21 +433,6 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # TODO: Explore relationships within features and between features and targets
 
-    # TODO: comment out this further dataset subsampling (only here for faster debug)
-    keep_n_items_per_category = 2
-    filtered_indices = []
-    for cat_col in ['cat_id_FOODS', 'cat_id_HOBBIES', 'cat_id_HOUSEHOLD']:
-        category_items = X[X[cat_col] == 1]
-        # Get unique item_ids in the current category
-        unique_items = category_items['item_id'].unique()
-        sampled_items = np.random.choice(unique_items, size=min(len(unique_items), keep_n_items_per_category),
-                                         replace=False)
-        for item_id in sampled_items:
-            item_indices = category_items[category_items['item_id'] == item_id].index
-            filtered_indices.extend(item_indices.tolist())
-    X = X.loc[filtered_indices].reset_index(drop=True)
-    Y = Y.loc[filtered_indices].reset_index(drop=True)
-
     # Split data
     aux_split_params = {}
     if parsed_args.split_fn != "split_passthrough":
@@ -451,6 +440,10 @@ def main(parsed_args: argparse.Namespace) -> None:
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params = split_data_fn(X, Y)
     else:
         X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
+
+    # Accumulate potential split parameters to the predict parameters as they may be useful for the prediction function
+    if aux_split_params:
+        aux_predict_params.update(aux_split_params)
 
     # Optimize hyperparameters and train model, distinguishing between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
@@ -590,19 +583,6 @@ def main(parsed_args: argparse.Namespace) -> None:
 
         model = pipeline  # For consistency with other libraries, simply call the Sklearn pipeline "model"
 
-        # # Compute model predictions
-        # logger.info("Computing model predictions...")
-        # Y_pred, Y_train_pred = predict_fn(
-        #     X_test.squeeze(),
-        #     Y_test.squeeze(),  # Only relevant for prediction_fn = predict_zeros
-        #     pipeline,
-        #     X_train.squeeze(),
-        #     Y_train.squeeze(),  # Only relevant for prediction_fn = predict_zeros
-        # )
-        #
-        # # Y_pred = np.rint(np.clip(Y_pred, a_min=0, a_max=None))
-        # # Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
-
     elif "tensorflow" in MODELS[parsed_args.model]:
         optimization_needed = True
         Y_pred = None
@@ -623,14 +603,18 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # Compute model predictions
     logger.info("Computing model predictions...")
-    Y_pred, Y_train_pred = predict_fn(
+    Y_pred, Y_train_pred, optional_predictions = predict_fn(
         model,
         X_test.squeeze(),
         Y_test.squeeze(),  # Only relevant for prediction_fn = predict_zeros
         X_train.squeeze(),
         Y_train.squeeze(),  # Only relevant for prediction_fn = predict_zeros
-        **aux_split_params,
+        **aux_predict_params,
     )
+
+    # Accumulate potential extra predictions into aux_eval_params, which may be useful for complete model evaluation
+    if optional_predictions is not None:
+        aux_eval_params.update(optional_predictions)
 
     # Evaluate model predictions
     logger.info("Evaluating model predictions...")
@@ -641,6 +625,7 @@ def main(parsed_args: argparse.Namespace) -> None:
         Y_test.columns.tolist() if isinstance(Y_test, (pd.DataFrame, pd.Series)) else None,
         Y_train.squeeze(),
         Y_train_pred,
+        **aux_eval_params,
     )
 
     # Save results

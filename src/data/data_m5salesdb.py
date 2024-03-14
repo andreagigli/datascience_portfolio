@@ -51,7 +51,7 @@ def load_data(dpath: str, debug: bool = False) -> Tuple[DataFrame, DataFrame, Da
 
     # Eliminate part of the items for faster computation while in debug
     if debug:
-        keep_n_items_per_category = 10
+        keep_n_items_per_category = 2
         # Sample unique items within each category
         sampled_items = sales.groupby('cat_id')['item_id'].apply(
             lambda x: x.drop_duplicates()
@@ -446,7 +446,9 @@ def split_data(X: pd.DataFrame,
 
     # Prepare optional returns with additional information
     aux_split_params = {
-        'start_day_for_prediction': 1941  # Day from which "actual" predictions start, after the look-back period
+        'start_day_for_prediction': 1941,  # Day from which "actual" predictions start, after the look-back period
+        "X_val": X_val,
+        "Y_val": Y_val,
     }
 
     return X_train, Y_train, X_val, Y_val, X_test_extended, Y_test, cv_indices, aux_split_params

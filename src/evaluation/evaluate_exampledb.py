@@ -11,7 +11,7 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
-def calculate_metrics(Y_actual: np.ndarray, Y_predicted: np.ndarray) -> Dict[str, np.ndarray]:
+def calculate_metrics(Y_actual: np.ndarray, Y_predicted: np.ndarray, *args, **kwargs) -> Dict[str, np.ndarray]:
     """
     Calculates various regression metrics to evaluate the performance of a model.
 

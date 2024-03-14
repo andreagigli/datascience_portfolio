@@ -44,7 +44,7 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
              target_name: Optional[List[str]] = None,
              Y_train: Optional[Union[np.ndarray, pd.DataFrame]] = None,
              Y_train_pred: Optional[Union[np.ndarray, pd.DataFrame]] = None,
-             ) -> Tuple[DataFrame, Dict[str, Figure]]:
+             *args, **kwargs) -> Tuple[DataFrame, Dict[str, Figure]]:
     """
     Evaluates a regression model's performance, comparing actual vs. predicted values, and generates plots for visualization.
 
@@ -75,6 +75,12 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
         Y_train = Y_train.reset_index(drop=True) if isinstance(Y_train, (pd.DataFrame, pd.Series)) else Y_train
         Y_train_pred = Y_train_pred.reset_index(drop=True) if isinstance(Y_train_pred, (pd.DataFrame, pd.Series)) else Y_train_pred
 
+    if kwargs.get("Y_val") is not None and kwargs.get("Y_val_pred") is not None:
+        kwargs["Y_val"] = kwargs.get("Y_val").squeeze()
+        kwargs["Y_val_pred"] = kwargs.get("Y_val_pred").squeeze()
+        kwargs["Y_val"] = kwargs["Y_val"].reset_index(drop=True) if isinstance(kwargs["Y_val"], (pd.DataFrame, pd.Series)) else kwargs["Y_val"]
+        kwargs["Y_val_pred"] = kwargs["Y_val_pred"].reset_index(drop=True) if isinstance(kwargs["Y_val_pred"], (pd.DataFrame, pd.Series)) else kwargs["Y_val_pred"]
+
     # Print model type and parameters
     model_info = format_sklearn_estimator_info(model)
     print(model_info)
@@ -85,6 +91,9 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
     if Y_train is not None and Y_train_pred is not None:
         train_metrics = calculate_metrics(Y_train, Y_train_pred)
         scores_dict.update({key + '_train': train_metrics[key] for key in train_metrics})
+    if kwargs.get("Y_val_pred") is not None:
+        val_metrics = calculate_metrics(kwargs["Y_val"], kwargs["Y_val_pred"])
+        scores_dict.update({key + '_val': val_metrics[key] for key in val_metrics})
 
     # Convert scores_dict to DataFrame
     columns = ['y0'] if Y.ndim == 1 else ['y' + str(i) for i in range(Y.shape[1])]
@@ -97,39 +106,13 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
         target_name = ["y" + str(i) for i in range(Y.shape[1])] if Y.ndim > 1 else ["y"]
 
     # Generate scatter plot for test data
+    figs = {}
     n_scatter_samples = 100
-
-    if len(Y) > n_scatter_samples:  # Limit the number of plotted datapoints
-        indices = np.random.choice(range(len(Y)), size=n_scatter_samples, replace=False)
-        Y_sampled = Y[indices]  # Assuming Y is a pandas Series or DataFrame
-        Y_pred_sampled = Y_pred[indices]
-    else:
-        Y_sampled = Y
-        Y_pred_sampled = Y_pred
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(x=Y_sampled, y=Y_pred_sampled, alpha=0.6)
-    plt.plot([Y_sampled.min(), Y_sampled.max()], [Y_sampled.min(), Y_sampled.max()], color='red', lw=2)  # Line for perfect predictions
-    plt.xlabel('Actual Values')
-    plt.ylabel('Predicted Values')
-    plt.title(f'Test: Actual vs Predicted {target_name[0]}. R2={scores.loc["R2", "Aggregated"]:.2f}')
-    figs = {'scatter_plot': plt.gcf()}
-
-    # Generate scatter plot for training data if provided
+    figs["Y_pred"] = plot_predictions(Y, Y_pred, n_scatter_samples, scores, "Test", target_name)
     if Y_train is not None and Y_train_pred is not None:
-        if len(Y_train) > n_scatter_samples:  # Limit the number of plotted datapoints
-            indices = np.random.choice(range(len(Y_train)), size=n_scatter_samples, replace=False)
-            Y_train_sampled = Y_train[indices]  # Assuming Y is a pandas Series or DataFrame
-            Y_train_pred_sampled = Y_train_pred[indices]
-        else:
-            Y_train_sampled = Y_train
-            Y_train_pred_sampled = Y_train_pred
-        plt.figure(figsize=(10, 6))
-        sns.scatterplot(x=Y_train_sampled, y=Y_train_pred_sampled, alpha=0.6)
-        plt.plot([Y_train_sampled.min(), Y_train_sampled.max()], [Y_train_sampled.min(), Y_train_sampled.max()], color='red', lw=2)
-        plt.xlabel('Actual Values')
-        plt.ylabel('Predicted Values')
-        plt.title(f'Train: Actual vs Predicted {target_name[0]}. R2={scores.loc["R2_train", "Aggregated"]:.2f}')
-        figs['scatter_plot_train'] = plt.gcf()
+        figs["Y_train_pred"] = plot_predictions(Y_train, Y_train_pred, n_scatter_samples, scores, "Train", target_name)
+    if kwargs.get("Y_val") is not None and kwargs.get("Y_val_pred") is not None:
+        figs["Y_val_pred"] = plot_predictions(kwargs.get("Y_val"), kwargs.get("Y_val_pred"), n_scatter_samples, scores, "Val", target_name)
 
     return scores, figs
 
@@ -188,3 +171,21 @@ def format_step_info(step_name: str, step_model: BaseEstimator) -> str:
         param_lines.append(f"      {param}: {value_str}")
 
     return "\n".join([step_type] + param_lines)
+
+
+def plot_predictions(Y, Y_pred, n_scatter_samples, scores, dataset_split_name, target_name):
+    if len(Y) > n_scatter_samples:  # Limit the number of plotted datapoints
+        indices = np.random.choice(range(len(Y)), size=n_scatter_samples, replace=False)
+        Y_sampled = Y[indices]  # Assuming Y is a pandas Series or DataFrame
+        Y_pred_sampled = Y_pred[indices]
+    else:
+        Y_sampled = Y
+        Y_pred_sampled = Y_pred
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(x=Y_sampled, y=Y_pred_sampled, alpha=0.6)
+    plt.plot([Y_sampled.min(), Y_sampled.max()], [Y_sampled.min(), Y_sampled.max()], color='red',
+             lw=2)  # Line for perfect predictions
+    plt.xlabel('Actual Values')
+    plt.ylabel('Predicted Values')
+    plt.title(f'{dataset_split_name}: Actual vs Predicted {target_name[0]}. R2={scores.loc["R2", "Aggregated"]:.2f}')
+    return plt.gcf()
