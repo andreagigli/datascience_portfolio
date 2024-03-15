@@ -46,21 +46,26 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
              Y_train_pred: Optional[Union[np.ndarray, pd.DataFrame]] = None,
              *args, **kwargs) -> Tuple[DataFrame, Dict[str, Figure]]:
     """
-    Evaluates a regression model's performance, comparing actual vs. predicted values, and generates plots for visualization.
+    Evaluates a regression model's performance by comparing actual vs. predicted values across test, training,
+    and optionally validation datasets. Generates various metrics and scatter plots for visualization of predictions.
 
     Args:
         Y (Union[np.ndarray, pd.DataFrame]): Actual target values for the test set.
         Y_pred (Union[np.ndarray, pd.DataFrame]): Predicted target values for the test set.
         model (BaseEstimator): The regression model used for predictions.
-        target_name (Optional[List[str]]): List containing the name(s) of the target variable(s).
+        target_name (Optional[List[str]]): List containing the name(s) of the target variable(s), used for plot labeling.
         Y_train (Optional[Union[np.ndarray, pd.DataFrame]]): Actual target values for the training set, if available.
         Y_train_pred (Optional[Union[np.ndarray, pd.DataFrame]]): Predicted target values for the training set, if available.
 
+    Optional Keyword Args:
+        Y_val (Optional[Union[np.ndarray, pd.DataFrame]]): Actual target values for the validation set, if available.
+        Y_val_pred (Optional[Union[np.ndarray, pd.DataFrame]]): Predicted target values for the validation set, if available.
+
     Returns:
-        scores (DataFrame): A DataFrame containing evaluation metrics such as MAE, MSE, RMSE, NRMSE, and R2,
-                            for both test and optionally for the training dataset.
+        scores (pd.DataFrame): A DataFrame containing evaluation metrics such as MAE, MSE, RMSE, NRMSE, and R^2
+                               for test, training, and optionally validation datasets.
         figs (Dict[str, plt.Figure]): A dictionary of matplotlib Figures, including scatter plots of actual vs.
-                                  predicted values for the test set and, if provided, for the training set.
+                                      predicted values for test, training, and optionally validation datasets.
     """
     # Remove potentially redundant dimensions from the data
     Y = Y.squeeze()

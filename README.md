@@ -24,13 +24,32 @@ The dataset for this challenge consists of the following files provided on Kaggl
 - **calendar.csv**: The calendar file includes details about the dates on which the products are sold from day 1 to day 1969, including day of the week, month, year, and any special events or holidays that might affect sales. 
 
 
-### Sequential forecasting strategy
+### Sequential Forecasting Strategy
 
-To predict sales volumes over the following 28 days, a sequential forecasting is applied. 
-Starting with initial sales data for an item and shop on a specific day, the model forecasts the next day's sales. 
-This prediction is then utilized to update the model's features for the subsequent day. 
-This process is iterated to allow a chain of forecasts across multiple future days. 
-Training covers data up to day 1912, with days 1912 to 1940 used for validation, and days 1941 to 1969 for testing.
+The Kaggle challenge requires predicting the sales volumes for days 1942 to 1969 (28 days) using only information until day 1941.
+A sequential forecasting procedure is applied. 
+Here's a quick overview of the data and approach:
+
+#### Data Structure
+- **Design Matrix (X)**: Each row corresponds to daily sales data for a unique item-shop combination, identified by `id` and `d` columns. 
+                         The row includes item descriptors, daily sales (`sold` column), and historical sales data.
+- **Target (Y)**: Designed to predict the sales units for the day immediately following each entry in X. 
+                  This means every row in Y is aligned with a row in X but represents the sales for the next day. 
+                  Essentially, Y acts as a one-day-forward version of the `sold` column in X.
+
+#### Training, Validation, and Test Sets
+- **Training Set**: Data up to day 1912 for model training.
+- **Validation Set**: Days 1912 to 1940 for model tuning.
+- **Test Set**: Days 1941 to 1969 for forecasting, with day 1941 included to initiate the sequential prediction process.
+                Note that Kaggle does not provide the ground truth sales for days >= 1942, therefore Y_test is filled with zero-valued placeholders in all rows corresponding to days >= 1941.
+
+#### Forecasting and Evaluation
+- **Sequential Forecasting**: Starting with initial sales data for an item-shop combination on a specific day, the model forecasts the next day's sales. 
+                              This prediction is then utilized to update the model's features for the subsequent day. 
+                              This process is iterated to allow a chain of forecasts across multiple future days. 
+- **Evaluation**: 
+  - The evaluation focuses on the days 1942 to 1969. Since Y is structured to represent the following day's sales, what is sent to the Kaggle competition are the predictions in the rows of Y_test corresponding to the days 1941-1968 in X_test.
+  - A direct evaluation with goodness of fit metrics is of course possible on the train and validation sets, although this is not representative of realistic model performance.
 
 
 ## Project Structure
