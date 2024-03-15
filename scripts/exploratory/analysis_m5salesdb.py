@@ -408,7 +408,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     if parsed_args.precomputed_features_path is None:
         # Load data
         logger.info("Loading data and extracting features...")
-        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)
+        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
         sales = preprocess_fn(sales, sell_prices, calendar)
 
         # # Exploratory data analysis
@@ -601,8 +601,7 @@ def main(parsed_args: argparse.Namespace) -> None:
         Y_train_pred = None
         cv_results_df = None
 
-    # Compute model predictions
-    logger.info("Computing model predictions...")
+    # Compute model predictionsce    logger.info("Computing model predictions...")
     Y_pred, Y_train_pred, optional_predictions = predict_fn(
         model,
         X_test.squeeze(),

@@ -46,8 +46,11 @@ def predict(model: Callable,
     # Initialize variables for sequential prediction
     start_day_for_prediction = kwargs["start_day_for_prediction"]
     extract_features_fn = kwargs["extract_features_fn"]
-    Y_pred = X_test.loc[X_test["d"] >= start_day_for_prediction, ["id", "d"]].copy()  # Y_pred has auxiliary fields to align with X_test
-    Y_pred["sold"] = 0
+    Y_pred = pd.DataFrame(
+        index=pd.MultiIndex.from_frame(X_test.loc[X_test["d"] >= start_day_for_prediction, ["id", "d"]]),
+        data={"sold_next_day": 0},
+        columns=["sold_next_day"],
+    )
 
     # Perform sequential prediction starting from start_day_for_prediction until the second-last day in X_test
     for day in sorted(X_test.loc[X_test["d"] >= start_day_for_prediction, "d"].unique())[:-1]:
@@ -71,7 +74,7 @@ def predict(model: Callable,
             # be possible to assign the predicted sold to the next_day (TODO: implement a proper mapping to do so, in case).
             raise ValueError(f"Items are not aligned between day {day} and next day {next_day}")
         else:
-            Y_pred.loc[Y_pred['d'] == day, 'sold'] = predictions
+            Y_pred.loc[(slice(None), day), 'sold_next_day'] = predictions
             X_test.loc[X_test['d'] == next_day, 'sold'] = predictions
 
         # Extract features for "next_day"
@@ -87,17 +90,26 @@ def predict(model: Callable,
             next_day_features.index = X_test.loc[X_test['d'] == next_day, :].index
             X_test.loc[X_test['d'] == next_day, :] = next_day_features
 
-    # Strip the Y_pred of the accessory columns
-    Y_pred = Y_pred["sold"].values
-
     # For model assment purposes, also predict the training set and the validation sets (the Kaggle challenge doesn't provide Y_test)
     Y_train_pred = model.predict(X_train.squeeze())
     Y_train_pred = np.rint(np.clip(Y_train_pred, a_min=0, a_max=None))
+    if Y_train is not None:
+        Y_train_pred = pd.DataFrame(
+            index=Y_train.index,
+            data={"sold_next_day": Y_train_pred},
+            columns=["sold_next_day"],
+        )
 
     optional_predictions = None
     if kwargs.get("X_val") is not None and kwargs.get("Y_val") is not None:
         Y_val_pred = model.predict(kwargs.get("X_val").squeeze())
         Y_val_pred = np.rint(np.clip(Y_val_pred, a_min=0, a_max=None))
+        if kwargs.get("Y_val") is not None:
+            Y_val_pred = pd.DataFrame(
+                index=kwargs.get("Y_val").index,
+                data={"sold_next_day": Y_val_pred},
+                columns=["sold_next_day"],
+            )
         optional_predictions = {"Y_val_pred": Y_val_pred, "Y_val": kwargs.get("Y_val")}
 
     return Y_pred, Y_train_pred, optional_predictions

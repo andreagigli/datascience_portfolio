@@ -172,7 +172,7 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
     # sales = sales.drop(columns=[col for col in sales.columns if "NoEvent" in col])
 
     # Create target variable by shifting the sales backwards, so that the model learns to predict the next day's sales
-    sales["target"] = sales.groupby("id")['sold'].shift(-1).fillna(0)
+    sales["sold_next_day"] = sales.groupby("id")['sold'].shift(-1).fillna(0)
 
     # Zero-out the "sales-related" features that were computed for days 1942-1969 (test days). Since we will be
     # performing sequential inference, those features will be computed at inference time using the model prediction,
@@ -194,16 +194,19 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
     # Divide dataframe into X and Y
     if extract_features_only_for_these_days is None:
         print("Separate data into features X and targets Y")
-    Y = sales[["target"]]  # Shift the sales so that the model learns to predict the next day's sales
-    X = sales.drop(columns=["target"])
+    Y = sales.set_index(["id", "d"])[["sold_next_day"]]  # Set Y so to contain sold_next_day and to match the index of the corresponding entry in sales (and X)
+    X = sales.drop(columns=["sold_next_day"])
 
     # Optionally filter the extracted features for the desired days
     if extract_features_only_for_these_days is not None:
-        idx_days_of_interest = X["d"].isin(extract_features_only_for_these_days)
-        X = X[idx_days_of_interest]
-        Y = Y[idx_days_of_interest]
+        idx_days_of_interest_X = X["d"].isin(extract_features_only_for_these_days)
+        X = X[idx_days_of_interest_X]
+
+        idx_days_of_interest_Y = Y.index.get_level_values('d').isin(extract_features_only_for_these_days)
+        Y = Y[idx_days_of_interest_Y]
+
         # Now that both X and Y are filtered based on the condition, reset their indices
         X = X.reset_index(drop=True)
-        Y = Y.reset_index(drop=True)
+        # Y = Y.reset_index(drop=True)  # No need to reset the index if Y's index is ("id", "d")
 
     return X, Y

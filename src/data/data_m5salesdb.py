@@ -429,18 +429,23 @@ def split_data(X: pd.DataFrame,
         Y_test (pd.DataFrame): Target variable for the actual test period, not including the look-back days.
         aux_split_params (Optional[Dict[str, any]]): Additional parameters like 'start_day_for_prediction' that may be useful for prediction.
     """
-    # Define indices for the initial split
     idx_train = X["d"] < 1912
     idx_val = (X["d"] >= 1912) & (X["d"] < 1941)
     idx_test = X["d"] >= 1941 - look_back_days  # Extend the test set back by `look_back_days`
 
-    # Perform the initial split
     X_train = X.loc[idx_train].reset_index(drop=True)
-    Y_train = Y.loc[idx_train].reset_index(drop=True)
     X_val = X.loc[idx_val].reset_index(drop=True)
-    Y_val = Y.loc[idx_val].reset_index(drop=True)
     X_test_extended = X.loc[idx_test].reset_index(drop=True)
-    Y_test = Y.loc[X["d"] >= 1941].reset_index(drop=True)  # Y_test corresponds to the actual test period without the look-back days
+
+    # # In case Y was a integer indexed dataframe we would have had to reset the index
+    # Y_train = Y.loc[idx_train].reset_index(drop=True)
+    # Y_val = Y.loc[idx_val].reset_index(drop=True)
+    # Y_test = Y.loc[X["d"] >= 1941].reset_index(drop=True)  # Y_test corresponds to the actual test period without the look-back days
+
+    # Note: 'Y' is assumed to have a multi-index of ('id', 'd') and a column 'sold_next_day'. Resetting the index is not necessary
+    Y_train = Y.loc[(slice(None), slice(None, 1911)), :]
+    Y_val = Y.loc[(slice(None), slice(1912, 1940)), :]
+    Y_test = Y.loc[(slice(None), slice(1941, None)), :]
 
     cv_indices = None
 
@@ -521,6 +526,6 @@ def subsample_items(X: pd.DataFrame, Y: pd.DataFrame, cv_indices: Optional[List[
 
         # Now, reset the indices of sampled_X and sampled_Y
         sampled_X = sampled_X.reset_index(drop=True)
-        sampled_Y = sampled_Y.reset_index(drop=True)
+        # sampled_Y = sampled_Y.reset_index(drop=True)  # Not necessary to reset the index if Y has ("id", "d") as index
 
     return sampled_X, sampled_Y, adjusted_cv_indices

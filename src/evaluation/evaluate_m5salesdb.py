@@ -92,13 +92,13 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
 
     # Compute metrics
     test_metrics = calculate_metrics(Y, Y_pred)
-    scores_dict = {key: test_metrics[key] for key in test_metrics}
+    scores_dict = {f"{key}_test": test_metrics[key] for key in test_metrics}
     if Y_train is not None and Y_train_pred is not None:
         train_metrics = calculate_metrics(Y_train, Y_train_pred)
-        scores_dict.update({key + '_train': train_metrics[key] for key in train_metrics})
+        scores_dict.update({f"{key}_train": train_metrics[key] for key in train_metrics})
     if kwargs.get("Y_val_pred") is not None:
         val_metrics = calculate_metrics(kwargs["Y_val"], kwargs["Y_val_pred"])
-        scores_dict.update({key + '_val': val_metrics[key] for key in val_metrics})
+        scores_dict.update({f"{key}_val": val_metrics[key] for key in val_metrics})
 
     # Convert scores_dict to DataFrame
     columns = ['y0'] if Y.ndim == 1 else ['y' + str(i) for i in range(Y.shape[1])]
@@ -112,7 +112,7 @@ def evaluate(Y: Union[np.ndarray, pd.DataFrame],
 
     # Generate scatter plot for test data
     figs = {}
-    n_scatter_samples = 100
+    n_scatter_samples = 1000
     figs["Y_pred"] = plot_predictions(Y, Y_pred, n_scatter_samples, scores, "Test", target_name)
     if Y_train is not None and Y_train_pred is not None:
         figs["Y_train_pred"] = plot_predictions(Y_train, Y_train_pred, n_scatter_samples, scores, "Train", target_name)
@@ -192,5 +192,5 @@ def plot_predictions(Y, Y_pred, n_scatter_samples, scores, dataset_split_name, t
              lw=2)  # Line for perfect predictions
     plt.xlabel('Actual Values')
     plt.ylabel('Predicted Values')
-    plt.title(f'{dataset_split_name}: Actual vs Predicted {target_name[0]}. R2={scores.loc["R2", "Aggregated"]:.2f}')
+    plt.title(f'{dataset_split_name}: Actual vs Predicted {target_name[0]}. R2={scores.loc[f"R2_{dataset_split_name.lower()}", "Aggregated"]:.2f}')
     return plt.gcf()
