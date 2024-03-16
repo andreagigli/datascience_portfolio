@@ -1,16 +1,15 @@
 """
-This script is designed for flexible machine learning workflows. It allows for dynamic loading of data, preprocessing, feature extraction, model training, and evaluation based on specified function identifiers. Users can specify model parameters, choose to train a new model or use a pre-trained one, and control data splitting for training and testing.
+This script is designed for flexible machine learning workflows.
+It allows for dynamic loading of data, preprocessing, eda, feature extraction, model hparam optimization, model training, inference and evaluation based on specified function identifiers.
+Users can specify model parameters, choose to train a new model or use a pre-trained one, control data splitting for training and testing, and whether to save the outputs or not.
 
 Example shell calls:
-
-1. Basic usage with required arguments (no hopt, split train-test)
-
 python analysis_exampledb.py
 --data_path ../../data/external/m5salesdb/
 --data_loading_fn load_m5salesdb
---precomputed_features_path ../../data/processed/m5salesdb_debug/
+--precomputed_features_path ../../data/processed/m5salesdb_debug_100/
 --model sklearn_HistGradientBoostingRegressor
---hparams "{\"sklearn_HistGradientBoostingRegressor__learning_rate\": \"loguniform(0.01, 0.3)\", \"sklearn_HistGradientBoostingRegressor__max_depth\": \"randint(3, 30)\", \"sklearn_HistGradientBoostingRegressor__min_samples_leaf\": \"randint(1, 20)\"}"
+--hparams "{\"sklearn_HistGradientBoostingRegressor__learning_rate\": \"loguniform(0.01, 0.3)\", \"sklearn_HistGradientBoostingRegressor__max_depth\": \"randint(3, 30)\"}"
 --hopt_n_rndcv_samplings 10
 --hopt_subsampling_fn subsample_train_m5salesdb
 --hopt_subsampling_rate 1.0
@@ -27,6 +26,31 @@ python analysis_exampledb.py
 --output_model_dir ../../models/
 --output_reports_dir ../../outputs/reports/
 --output_figures_dir ../../outputs/figures/
+
+python analysis_exampledb.py
+--data_path ../../data/external/m5salesdb/
+--data_loading_fn load_m5salesdb
+--precomputed_features_path ../../data/processed/m5salesdb_debug_100/
+--model sklearn_Ridge
+--hparams "{\"sklearn_Ridge__alpha\": \"loguniform(0.01, 10)\"}"
+--hopt_n_rndcv_samplings 10
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_sklearn
+--evaluation_fn evaluate_m5salesdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ../../data/processed/
+--output_model_dir ../../models/
+--output_reports_dir ../../outputs/reports/
+--output_figures_dir ../../outputs/figures/
+
+
 """
 
 import argparse
@@ -408,7 +432,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     if parsed_args.precomputed_features_path is None:
         # Load data
         logger.info("Loading data and extracting features...")
-        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=True)
+        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)
         sales = preprocess_fn(sales, sell_prices, calendar)
 
         # # Exploratory data analysis
@@ -646,10 +670,10 @@ def main(parsed_args: argparse.Namespace) -> None:
 
         if cv_results_df is not None:
             cv_results_path = os.path.join(model_summaries_dir, f"cv_results_{parsed_args.run_id}.csv")
-            cv_results_df.to_csv(cv_results_path, index=False)
+            cv_results_df.to_csv(cv_results_path, index=True)
 
         report_path = os.path.join(output_reports_dir, f"scores_{parsed_args.run_id}.csv")
-        scores.to_csv(report_path, index=False)
+        scores.to_csv(report_path, index=True)
 
         for fig_name, fig in figs.items():
             fig_path = os.path.join(output_figures_dir, f"{fig_name}_{parsed_args.run_id}.png")

@@ -28,6 +28,14 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
     # This helps prevent SettingWithCopyWarning when sales is a slice of another DataFrame.
     sales = sales.copy()
 
+    # Check if 'id' and 'd' are in the columns of sales or otherwise set them from the index (MultiIndex)
+    if 'id' not in sales.columns or 'd' not in sales.columns:
+        # Check if 'id' and 'd' are part of a MultiIndex
+        if isinstance(sales.index, pd.MultiIndex) and 'id' in sales.index.names and 'd' in sales.index.names:
+            sales.reset_index(inplace=True)
+        else:
+            raise ValueError("DataFrame must contain 'id' and 'd' either as columns or as part of a MultiIndex.")
+
     # If feature extraction is only required for certain days, check whether the days are valid
     extract_features_only_for_these_days = kwargs.get('extract_features_only_for_these_days')
     if extract_features_only_for_these_days:
@@ -194,19 +202,19 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
     # Divide dataframe into X and Y
     if extract_features_only_for_these_days is None:
         print("Separate data into features X and targets Y")
+    X = sales.drop(columns=["sold_next_day"]).set_index(["id", "d"])
     Y = sales.set_index(["id", "d"])[["sold_next_day"]]  # Set Y so to contain sold_next_day and to match the index of the corresponding entry in sales (and X)
-    X = sales.drop(columns=["sold_next_day"])
 
     # Optionally filter the extracted features for the desired days
     if extract_features_only_for_these_days is not None:
-        idx_days_of_interest_X = X["d"].isin(extract_features_only_for_these_days)
+        idx_days_of_interest_X = X.index.get_level_values('d').isin(extract_features_only_for_these_days)
         X = X[idx_days_of_interest_X]
 
         idx_days_of_interest_Y = Y.index.get_level_values('d').isin(extract_features_only_for_these_days)
         Y = Y[idx_days_of_interest_Y]
 
         # Now that both X and Y are filtered based on the condition, reset their indices
-        X = X.reset_index(drop=True)
+        # X = X.reset_index(drop=True)
         # Y = Y.reset_index(drop=True)  # No need to reset the index if Y's index is ("id", "d")
 
     return X, Y
