@@ -4,20 +4,45 @@ It allows for dynamic loading of data, preprocessing, eda, feature extraction, m
 Users can specify model parameters, choose to train a new model or use a pre-trained one, control data splitting for training and testing, and whether to save the outputs or not.
 
 Example shell calls:
+
+PREFERRED: using LGBMRegressor (handles large datasets, without need to one-hot encode cathegorical variables)
 python analysis_exampledb.py
 --data_path ../../data/external/m5salesdb/
 --data_loading_fn load_m5salesdb
---precomputed_features_path ../../data/processed/m5salesdb_debug_100/
---model sklearn_HistGradientBoostingRegressor
---hparams "{\"sklearn_HistGradientBoostingRegressor__learning_rate\": \"loguniform(0.01, 0.3)\", \"sklearn_HistGradientBoostingRegressor__max_depth\": \"randint(3, 30)\"}"
---hopt_n_rndcv_samplings 10
+--model sklearn_compatible_LGBMRegressor
+--hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
+--hopt_n_rndcv_samplings 5
 --hopt_subsampling_fn subsample_train_m5salesdb
 --hopt_subsampling_rate 1.0
 --preprocessing_fn preprocess_m5salesdb
 --eda_fn eda_m5salesdb
 --feature_extraction_fn features_m5salesdb
 --split_fn split_m5salesdb
---prediction_fn predict_sklearn
+--prediction_fn predict_m5salesdb
+--evaluation_fn evaluate_m5salesdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ../../data/processed/
+--output_model_dir ../../models/
+--output_reports_dir ../../outputs/reports/
+--output_figures_dir ../../outputs/figures/
+
+IF FEATURES WERE PRECOMPUTED:
+python analysis_exampledb.py
+--data_path ../../data/external/m5salesdb/
+--data_loading_fn load_m5salesdb
+--precomputed_features_path ../../data/processed/m5salesdb_debug_100/
+--model sklearn_compatible_LGBMRegressor
+--hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
+--hopt_n_rndcv_samplings 5
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_m5salesdb
 --evaluation_fn evaluate_m5salesdb
 --log_level INFO
 --random_seed 0
@@ -32,15 +57,16 @@ python analysis_exampledb.py
 --data_loading_fn load_m5salesdb
 --precomputed_features_path ../../data/processed/m5salesdb_debug_100/
 --model sklearn_Ridge
---hparams "{\"sklearn_Ridge__alpha\": \"loguniform(0.01, 10)\"}"
---hopt_n_rndcv_samplings 10
+--data_transformers sklearn_RBFSampler
+--hparams "{\"sklearn_RBFSampler__n_components\": 1000, \"sklearn_RBFSampler__gamma\": \"loguniform(0.001, 10)\", \"sklearn_Ridge__alpha\": \"loguniform(0.00001, 1)\", }"
+--hopt_n_rndcv_samplings 5
 --hopt_subsampling_fn subsample_train_m5salesdb
 --hopt_subsampling_rate 1.0
 --preprocessing_fn preprocess_m5salesdb
 --eda_fn eda_m5salesdb
 --feature_extraction_fn features_m5salesdb
 --split_fn split_m5salesdb
---prediction_fn predict_sklearn
+--prediction_fn predict_m5salesdb
 --evaluation_fn evaluate_m5salesdb
 --log_level INFO
 --random_seed 0
@@ -49,7 +75,6 @@ python analysis_exampledb.py
 --output_model_dir ../../models/
 --output_reports_dir ../../outputs/reports/
 --output_figures_dir ../../outputs/figures/
-
 
 """
 
@@ -69,6 +94,7 @@ import sys
 
 from datetime import datetime
 
+from lightgbm import LGBMRegressor
 from scipy.sparse import csr_matrix
 from scipy.stats import loguniform, randint, uniform, rv_continuous, rv_discrete
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -91,6 +117,7 @@ import src.evaluation.evaluate_m5salesdb
 import src.features.features_m5salesdb
 import src.models.custom_linear_regressor
 import src.prediction.predict_m5salesdb
+from src.eda.eda_misc import plot_correlation_heatmap, plot_pairwise_scatterplots
 
 from src.optimization.custom_sk_validators import PredefinedSplit
 from src.utils.my_dataframe import convert_df_to_sparse_matrix
@@ -104,6 +131,7 @@ MODELS: Dict[str, Type[BaseEstimator]] = {
     "sklearn_SVC": SVC,
     "sklearn_RandomForestRegressor": RandomForestRegressor,
     "sklearn_HistGradientBoostingRegressor": HistGradientBoostingRegressor,
+    "sklearn_compatible_LGBMRegressor": LGBMRegressor,
     "mymodel": src.models.custom_linear_regressor.CustomModel,
 }
 DATA_TRANSFORMERS: Dict[str, Type[Union[TransformerMixin, BaseEstimator]]] = {
@@ -432,7 +460,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     if parsed_args.precomputed_features_path is None:
         # Load data
         logger.info("Loading data and extracting features...")
-        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)
+        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)  # Set debug=True to select a subset of the items (faster computation)
         sales = preprocess_fn(sales, sell_prices, calendar)
 
         # # Exploratory data analysis
@@ -455,7 +483,10 @@ def main(parsed_args: argparse.Namespace) -> None:
         X = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "X.pkl"))
         Y = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "Y.pkl"))
 
-    # TODO: Explore relationships within features and between features and targets
+    # Explore relationships within features and between features and targets
+    plot_correlation_heatmap(X, Y, sample_size=1000, method='pearson')
+    plot_correlation_heatmap(X, Y, sample_size=1000, method='spearman')
+    plot_pairwise_scatterplots(X, Y, columns_to_plot=["sold", "sell_price", "wday", "sold_robustlag_7", "sold_next_day"], sample_size=100)
 
     # Split data
     aux_split_params = {}
