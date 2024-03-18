@@ -149,11 +149,8 @@ Custom modules can be implemented for a variety of operations:
 Import all the newly written modules into the analysis script `scripts/exploratory/analysis_newdb.py`:
 ```python
 import sklearn.svm.SVC
-import src.models.custom_model.CustomModel
+import src.models.custom_model
 import src.data.data_newdb
-import src.data.preprocess_data
-import src.data.data_newdb.split_data
-import src.data.data_newdb.subsample_data
 import src.eda.eda_newdb 
 import src.features.features_newdb
 import src.prediction.predict_newdb 
