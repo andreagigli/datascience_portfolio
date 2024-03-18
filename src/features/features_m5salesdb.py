@@ -4,6 +4,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
+
 def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Extract and generate a set of features for the sales DataFrame, including lag and robust lag features,
@@ -120,13 +121,13 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
     # # Trend indicators
     # if extract_features_only_for_these_days is None:
     #     print("Compute trend indicators")
-    # sales["sold_linear_slope_30d"] = sales.groupby("item_id", observed=True)["sold"].rolling(window=30).apply(lambda x: linear_slope(x, downsampling_factor=5), raw=False)  # This can be very computational intensive
+    # sales["sold_linear_slope_30d"] = sales.groupby("item_id", observed=True)["sold"].rolling(window=30).apply(lambda x: linear_slope(x, downsampling_factor=5), raw=False)  # This can be very computationally intensive
 
     # # Seasonality features commonly include day of the week, week number, year, and special events, with lagged
     # # features capturing autocorrelation related to seasonality. For cycles not aligned with calendar periods (e.g.,
     # # 4-day cycles) or when dealing with multiple seasonal patterns, Fourier Series Components are useful. They
     # # simplify encoding cyclical patterns by adding sine and cosine functions for identified cycles (e.g., 3-day,
-    # # 50-day periods), with frequencies matching the cycles" periods. The phase is not explicitly encoded because the
+    # # 50-day periods), with frequencies matching the cycles' period. The phase is not explicitly encoded because the
     # # model will adjust the weights of the sine and cosine features to reflect the phase shifts.
     # if extract_features_only_for_these_days is None:
     #     print("Compute seasonality features")
