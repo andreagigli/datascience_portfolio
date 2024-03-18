@@ -131,16 +131,95 @@ Store your new database in `data/external/newdb/`.
 Copy `scripts/exploratory/analysis_exampledb.py` to `scripts/exploratory/analysis_newdb.py` as a starting template.
 
 
-### Implement Custom Modules and Customize Analysis Script
+### Implement Custom Modules
 
-**Example Function Call**
-Use the following template to run your analysis script:
+Custom modules can be implemented for a variety of operations: 
+- **Data Loading**: `src.data.data_newdb.load_data`.
+- **Data Preprocessing**: `src.data.data_newdb.preprocess_data`.
+- **Exploratory Data Analysis (EDA)**: `src.eda.eda_newdb.eda`.
+- **Feature Extraction**: `src.features.features_newdb.extract_features`.
+- **Data Splitting**: `src.data.data_newdb.split_data`.
+- **Hyperparameter Optimization Subsampling**: `src.data.data_newdb.subsample_items` for subsampling training and validation sets during hyperparameter optimization.
+- **Model Training**: sklearn model or custom one, e.g., `sklearn.ensemble.RandomForestClassifier`.
+- **Model Evaluation**: `src.evaluation.evaluate_newdb.evaluate`.
+- **Custom Model**: If no scikit-learn, pytorch or tensorflow modules meet one's need, one can implement a custom model `src.models.custom_model.CustomModel`. In this case, it is recommended to adhere to scikit-learn's estimator interface (by defining fit(), predict(), and score() methods).
+
+### Customize Analysis Script
+
+Import all the newly written modules into the analysis script `scripts/exploratory/analysis_newdb.py`:
+```python
+import sklearn.svm.SVC
+import src.models.custom_model.CustomModel
+import src.data.data_newdb
+import src.data.preprocess_data
+import src.data.data_newdb.split_data
+import src.data.data_newdb.subsample_data
+import src.eda.eda_newdb 
+import src.features.features_newdb
+import src.prediction.predict_newdb 
+import src.evaluation.evaluate_newdb
+```
+
+Associate the imported modules with their command-line identifier, to allow for dynamic function mapping based on command-line arguments:
+```python
+MODELS = {
+    ...
+    "sklearn_SVC": sklearn.svm.SVC,
+    "sklearn_compatible_CustomModule": src.models.custom_model.CustomModel,  # ensure the id starts with "sklearn_compatible_" if the CustomModel is compatible with scikit-learn's estimator interface 
+}
+
+DATA_LOADING_FNS = {
+    ...
+    "load_newdb": src.data.data_newdb.load_data,
+}
+
+PREPROCESSING_FNS = {
+    ...
+    "preprocess_newdb": src.data.data_newdb.preprocess_data,
+}
+
+EDA_FNS = {
+    ...
+    "eda_newdb": src.eda.eda_newdb.eda,
+}
+
+FEATURE_EXTRACTION_FNS = {
+    ...
+    "features_newdb": src.features.features_newdb.extract_features,
+}
+
+SPLITTING_FNS = {
+    ...
+    "split_newdb": src.data.data_newdb.split_data,
+}
+
+HOPT_SUBSAMPLING_FNS = {
+    ...
+    "subsample_newdb": src.data.data_newdb.subsample_items,
+}
+
+PREDICTION_FNS = {
+    ...
+    "predict_newdb": src.prediction.predict_newdb.predict,
+}
+
+EVALUATION_FNS = {
+    ...
+    "evaluate_newdb": src.evaluation.evaluate_newdb.evaluate,
+}
+
+```
+
+
+### Run
+
+1. **Execute the analysis script with this command**:  
 ```
 python analysis_newdb.py
 --data_path data/external/newdb/
 --data_loading_fn load_newdb
---model sklearn_HistGradientBoostingRegressor
---hparams "{\"sklearn_HistGradientBoostingRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_HistGradientBoostingRegressor__learning_max_iter\": \"randint(100, 1000)\"}"
+--model sklearn_RandomForestClassifier
+--hparams "{\"sklearn_SVC__C\": \"loguniform(0.1, 10)\", \"sklearn_SVC__max_iter\": 200}"
 --hopt_n_rndcv_samplings 10
 --hopt_subsampling_fn subsample_newdb
 --hopt_subsampling_rate 1.0
@@ -159,37 +238,8 @@ python analysis_newdb.py
 --output_figures_dir outputs/figures/
 ```
 
-4. **Implement Custom Modules**
-For custom analysis steps, implement modules in the `src/` folder, e.g., `src/data/data_newdb.py` for data loading and preprocessing, and update the analysis script to import these modules.
 
-5. **Adapt Script**
-Import custom modules in `analysis_newdb.py` and adjust dictionaries within the script for dynamic module loading. For example:
-  ```python
-  ...
-  import src.data.data_newdb as data_newdb
-  import src.eda.eda_newdb as eda_newdb
-  import src.features.features_newdb as features_newdb
-  import src.prediction.predict_newdb as predict_newdb
-  import src.evaluation.evaluate_newdb as evaluate_newdb
-  ...
-
-  DATA_LOADING_FNS: Dict[str, Callable] = {
-      ...
-      "load_newdb": src.data.data_newdb.load_data,
-  }
-  
-  HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
-      ...
-      "subsample_newdb": src.data.data_newdb.subsample_items,
-  }
-
-  EVALUATION_FNS: Dict[str, Callable] = {
-      ...
-      "evaluate_newdb": src.evaluate.evaluate_newdb.evaluate,
-  }
-  ```
-
-6. **Output Organization and Processed Data Handling**
+2. **Output Organization and Processed Data Handling**
 - Outputs such as reports, figures, and model summaries are stored in directories named after a unique run identifier (typically a timestamp), e.g., `outputs/reports/run_id/` for reports and figures, `models/model_summaries/run_id/` and `models/trained_models/run_id/` for trained models. 
 - Extracted features (processed data) should be stored in `data/processed/newdb/` for quick reloading. This path can be specified through the corresponding command line argument --precomputed_features_path.
 
