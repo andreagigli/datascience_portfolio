@@ -1,6 +1,9 @@
 # Ignore these files and types
 *.egg-info
+*.h5
 *.idea
+*.parquet
+*.pkl
 
 # Ignore everything in these directories
 models/model_summaries/*

@@ -1,5 +1,62 @@
+from typing import Union
+
 import numpy as np
 import pandas as pd
+from scipy.sparse import csr_matrix
+
+
+def convert_df_to_sparse_matrix(df: pd.DataFrame, fill_value: Union[int, float] = 0) -> csr_matrix:
+    """
+    Converts a pandas DataFrame with mixed dense and sparse columns into a scipy CSR sparse matrix.
+
+    Args:
+        df: A pandas DataFrame with any mix of dense and sparse columns.
+        fill_value: The value used to fill "empty" entries in the dense columns before conversion. This is typically
+                    0 or any other value that represents missingness in your dataset.
+
+    Returns:
+        A scipy CSR (Compressed Sparse Row) matrix representation of the input DataFrame.
+
+    Raises:
+        AttributeError: If the provided DataFrame does not contain numeric data types.
+    """
+    # Ensure all columns are numeric
+    if not all(pd.api.types.is_numeric_dtype(col) for col in df.dtypes):
+        raise AttributeError("DataFrame contains non-numeric columns that cannot be converted to a sparse matrix.")
+
+    # Convert dense columns to SparseArrays with the specified fill_value
+    for col in df.columns:
+        if not pd.api.types.is_sparse(df[col].dtype):
+            df[col] = pd.arrays.SparseArray(df[col], fill_value=fill_value)
+
+    # Convert the entire DataFrame to a COO matrix, then to CSR format
+    sparse_matrix = csr_matrix(df.sparse.to_coo())
+
+    return sparse_matrix
+
+
+def convert_to_dataframe(data: Union[np.ndarray, pd.DataFrame, pd.Series], prefix: str) -> pd.DataFrame:
+    """
+    Converts numpy arrays or pandas Series to a DataFrame with generated column names.
+
+    Args:
+        data: The input data to convert.
+        prefix: The prefix for column names ('X' for features, 'Y' for targets).
+
+    Returns:
+        A pandas DataFrame representation of the input data.
+    """
+    if isinstance(data, np.ndarray):
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+        col_names = [f'{prefix}{i}' for i in range(data.shape[1])]
+        return pd.DataFrame(data, columns=col_names)
+    elif isinstance(data, pd.Series):
+        return pd.DataFrame(data, columns=[f'{prefix}0'])
+    elif isinstance(data, pd.DataFrame):
+        return data
+    else:
+        raise ValueError("Unsupported data type for conversion.")
 
 
 def downcast(df):
