@@ -1,9 +1,13 @@
-# ML and Data Science Portfolio
+# Data Science Portfolio
+
+
 
 ## Description
-A portfolio of machine learning and data science projects using my own ML and Data Science Python package. 
-Each branch investigates a different data science task or application domain. 
-Different data science projects are explored in distinct branches.
+
+This package provides a modular framework for managing multiple data analysis projects. 
+Users can initiate projects in isolated branches, leveraging both pre-built and customizable Python modules.
+
+
 
 ## Project Structure
 
@@ -36,8 +40,7 @@ portfolio_ML_datascience/
 │   └── model_summaries/    # Text files or summaries describing model performance
 │
 ├── outputs/                # Output files (e.g., predictions, figures)
-│   ├── figures/            # Generated graphics and plots
-│   └── reports/            # Generated analysis reports or summaries
+│   └── reports/            # Generated analysis reports and plots
 │
 ├── config/                 # Configuration files, like model parameters and environmental variables
 ├── docs/                   # Project documentation
@@ -52,6 +55,8 @@ portfolio_ML_datascience/
 └── LICENSE
 ```
 
+
+
 ## Installation
 
 ### Cloning and customizing the package
@@ -61,7 +66,6 @@ portfolio_ML_datascience/
 	```
 	git clone https://github.com/andreagigli/portfolio_ML_datascience.git
 	```
-
 
 ### Setting Up the Anaconda Environment
 
@@ -106,9 +110,89 @@ portfolio_ML_datascience/
       The editable installation allows you to modify the code and see the changes without reinstalling the package.
 	  
 
+
 ## Usage
 
-Place your data analysis scripts within the scripts/exploratory for initial exploration or scripts/report for final reports. Implement or utilize source code functionalities from the src directory as needed. New datasets should be stored in dedicated directories within data/external. Save trained models in models/trained_models and your analysis outputs, like figures and reports, in their respective directories within outputs. Ensure the models and output folders are named with a unique run identifier, typically a timestamp, to facilitate organization and traceability.
+To conduct a data analysis within this framework, follow these steps for each new project. Here the database `newdb` is used as an example.
+
+
+### Set Up New Project
+
+1. **Create a New Branch**
+For each new project, initiate a new branch from the main repository. This branch will house all project-specific scripts, data, and analyses.
+```
+git checkout -b project_newdb
+```
+
+2. **Prepare Data Directory**
+Store your new database in `data/external/newdb/`.
+
+3. **Set Up Analysis Script**
+Copy `scripts/exploratory/analysis_exampledb.py` to `scripts/exploratory/analysis_newdb.py` as a starting template.
+
+
+### Implement Custom Modules and Customize Analysis Script
+
+**Example Function Call**
+Use the following template to run your analysis script:
+```
+python analysis_newdb.py
+--data_path data/external/newdb/
+--data_loading_fn load_newdb
+--model sklearn_HistGradientBoostingRegressor
+--hparams "{\"sklearn_HistGradientBoostingRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_HistGradientBoostingRegressor__learning_max_iter\": \"randint(100, 1000)\"}"
+--hopt_n_rndcv_samplings 10
+--hopt_subsampling_fn subsample_newdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_newdb
+--eda_fn eda_newdb
+--feature_extraction_fn features_newdb
+--split_fn split_newdb
+--prediction_fn predict_newdb
+--evaluation_fn evaluate_newdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir data/processed/
+--output_model_dir models/
+--output_reports_dir outputs/reports/
+--output_figures_dir outputs/figures/
+```
+
+4. **Implement Custom Modules**
+For custom analysis steps, implement modules in the `src/` folder, e.g., `src/data/data_newdb.py` for data loading and preprocessing, and update the analysis script to import these modules.
+
+5. **Adapt Script**
+Import custom modules in `analysis_newdb.py` and adjust dictionaries within the script for dynamic module loading. For example:
+  ```python
+  ...
+  import src.data.data_newdb as data_newdb
+  import src.eda.eda_newdb as eda_newdb
+  import src.features.features_newdb as features_newdb
+  import src.prediction.predict_newdb as predict_newdb
+  import src.evaluation.evaluate_newdb as evaluate_newdb
+  ...
+
+  DATA_LOADING_FNS: Dict[str, Callable] = {
+      ...
+      "load_newdb": src.data.data_newdb.load_data,
+  }
+  
+  HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
+      ...
+      "subsample_newdb": src.data.data_newdb.subsample_items,
+  }
+
+  EVALUATION_FNS: Dict[str, Callable] = {
+      ...
+      "evaluate_newdb": src.evaluate.evaluate_newdb.evaluate,
+  }
+  ```
+
+6. **Output Organization and Processed Data Handling**
+- Outputs such as reports, figures, and model summaries are stored in directories named after a unique run identifier (typically a timestamp), e.g., `outputs/reports/run_id/` for reports and figures, `models/model_summaries/run_id/` and `models/trained_models/run_id/` for trained models. 
+- Extracted features (processed data) should be stored in `data/processed/newdb/` for quick reloading. This path can be specified through the corresponding command line argument --precomputed_features_path.
+
 
 
 ## License
