@@ -1,8 +1,7 @@
-# ML and Data Science Portfolio
+# Kaggle challenge: M5 Sales Forecasting 
 
 ## Description
-A portfolio of machine learning and data science projects using my own ML and Data Science Python package.
-This analysis is based on the Kaggle sales prediction challenge using the M5 sales dataset (https://www.kaggle.com/c/m5-forecasting-accuracy). 
+This analysis is based on the Kaggle sales forecasting challenge using the M5 sales dataset (https://www.kaggle.com/c/m5-forecasting-accuracy). 
 
 
 ## M5 Sales Forecasting Challenge Overview
