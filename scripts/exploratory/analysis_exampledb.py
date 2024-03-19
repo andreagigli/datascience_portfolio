@@ -3,74 +3,23 @@ This script is designed for flexible machine learning workflows.
 It allows for dynamic loading of data, preprocessing, eda, feature extraction, model hparam optimization, model training, inference and evaluation based on specified function identifiers.
 Users can specify model parameters, choose to train a new model or use a pre-trained one, control data splitting for training and testing, and whether to save the outputs or not.
 
-Example shell calls:
-
-PREFERRED: using LGBMRegressor (handles large datasets, without need to one-hot encode cathegorical variables)
+Example CLI call:
 python analysis_exampledb.py
---data_path ../../data/external/m5salesdb/
---data_loading_fn load_m5salesdb
---model sklearn_compatible_LGBMRegressor
---hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
+--data_path ../../data/external/exampledb/california_housing.csv
+--data_loading_fn load_exampledb
+--model sklearn_RandomForestRegressor
+--hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
 --hopt_n_rndcv_samplings 5
 --hopt_subsampling_fn subsampling_passthrough
 --hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_m5salesdb
---eda_fn eda_m5salesdb
---feature_extraction_fn features_m5salesdb
---split_fn split_m5salesdb
---prediction_fn predict_m5salesdb
---look_back_days_sequential_prediction 380
---evaluation_fn evaluate_m5salesdb
---log_level INFO
---random_seed 0
---save_output
---output_data_dir ../../data/processed/
---output_model_dir ../../models/
---output_reports_dir ../../outputs/reports/
---output_figures_dir ../../outputs/figures/
-
-IF FEATURES WERE PRECOMPUTED:
-python analysis_exampledb.py
---data_path ../../data/external/m5salesdb/
---data_loading_fn load_m5salesdb
---precomputed_features_path ../../data/processed/m5salesdb_debug_100/
---model sklearn_compatible_LGBMRegressor
---hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
---hopt_n_rndcv_samplings 5
---hopt_subsampling_fn subsample_train_m5salesdb
---hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_m5salesdb
---eda_fn eda_m5salesdb
---feature_extraction_fn features_m5salesdb
---split_fn split_m5salesdb
---prediction_fn predict_m5salesdb
---look_back_days_sequential_prediction 380
---evaluation_fn evaluate_m5salesdb
---log_level INFO
---random_seed 0
---save_output
---output_data_dir ../../data/processed/
---output_model_dir ../../models/
---output_reports_dir ../../outputs/reports/
---output_figures_dir ../../outputs/figures/
-
-python analysis_exampledb.py
---data_path ../../data/external/m5salesdb/
---data_loading_fn load_m5salesdb
---precomputed_features_path ../../data/processed/m5salesdb_debug_100/
---model sklearn_Ridge
---data_transformers sklearn_RBFSampler
---hparams "{\"sklearn_RBFSampler__n_components\": 1000, \"sklearn_RBFSampler__gamma\": \"loguniform(0.001, 10)\", \"sklearn_Ridge__alpha\": \"loguniform(0.00001, 1)\", }"
---hopt_n_rndcv_samplings 5
---hopt_subsampling_fn subsample_train_m5salesdb
---hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_m5salesdb
---eda_fn eda_m5salesdb
---feature_extraction_fn features_m5salesdb
---split_fn split_m5salesdb
---prediction_fn predict_m5salesdb
---look_back_days_sequential_prediction 380
---evaluation_fn evaluate_m5salesdb
+--preprocessing_fn preprocess_passthrough
+--eda_fn eda_passthrough
+--feature_extraction_fn features_exampledb
+--split_fn split_train_test
+--split_ratio "80 20"
+--n_folds 3
+--prediction_fn predict_sklearn
+--evaluation_fn evaluate_exampledb
 --log_level INFO
 --random_seed 0
 --save_output
@@ -179,6 +128,23 @@ EVALUATION_FNS: Dict[str, Callable] = {
     "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
     "evaluate_m5salesdb": src.evaluation.evaluate_m5salesdb.evaluate,
 }
+
+
+def check_load_args(data_path: str, data_loading_fn: str, precomputed_features_path: str) -> None:
+    """
+    Ensures that either data_path with data_loading_fn or precomputed_features_path is provided, but not both or neither.
+
+    Args:
+        data_path: The path to the raw data.
+        data_loading_fn: The function identifier used for loading raw data.
+        precomputed_features_path: The path to precomputed features.
+
+    Raises:
+        ValueError: If neither data_path with data_loading_fn nor precomputed_features_path is provided, or if both are provided.
+    """
+    if bool(data_path and data_loading_fn) == bool(precomputed_features_path):
+        raise ValueError(
+            "You must specify either --data_path with --data_loading_fn OR --precomputed_features_path, but not both or neither.")
 
 
 def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
@@ -816,8 +782,8 @@ def main(parsed_args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Machine Learning Script")
     parser.add_argument('--data_path', required=True, help='Path to the data file')
-    parser.add_argument('--precomputed_features_path', type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
     parser.add_argument('--data_loading_fn', required=True, choices=DATA_LOADING_FNS.keys(), help='Function identifier for loading data')
+    parser.add_argument('--precomputed_features_path', type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
@@ -846,6 +812,7 @@ if __name__ == "__main__":
     parsed_args = parser.parse_args()
 
     # Additional consistency check
+    check_load_args(parsed_args.data_path, parsed_args.data_loading_fn, parsed_args.precomputed_features_path)
     check_split_args(parsed_args.split_fn, parsed_args.split_ratio, parsed_args.model)
     check_hparams_opt_args(parsed_args.hparams, parsed_args.split_fn, parsed_args.n_folds)
     check_output_args(parsed_args.save_output, parsed_args.output_data_dir, parsed_args.output_model_dir, parsed_args.output_reports_dir, parsed_args.output_figures_dir)
