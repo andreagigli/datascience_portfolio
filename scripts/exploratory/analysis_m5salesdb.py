@@ -31,8 +31,6 @@ python analysis_exampledb.py
 
 IF FEATURES WERE PRECOMPUTED:
 python analysis_exampledb.py
---data_path ../../data/external/m5salesdb/
---data_loading_fn load_m5salesdb
 --precomputed_features_path ../../data/processed/m5salesdb_debug_100/
 --model sklearn_compatible_LGBMRegressor
 --hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
@@ -55,8 +53,6 @@ python analysis_exampledb.py
 --output_figures_dir ../../outputs/figures/
 
 python analysis_exampledb.py
---data_path ../../data/external/m5salesdb/
---data_loading_fn load_m5salesdb
 --precomputed_features_path ../../data/processed/m5salesdb_debug_100/
 --model sklearn_Ridge
 --data_transformers sklearn_RBFSampler
@@ -180,6 +176,23 @@ EVALUATION_FNS: Dict[str, Callable] = {
     "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
     "evaluate_m5salesdb": src.evaluation.evaluate_m5salesdb.evaluate,
 }
+
+
+def check_load_args(data_path: str, data_loading_fn: str, precomputed_features_path: str) -> None:
+    """
+    Ensures that either data_path with data_loading_fn or precomputed_features_path is provided, but not both or neither.
+
+    Args:
+        data_path: The path to the raw data.
+        data_loading_fn: The function identifier used for loading raw data.
+        precomputed_features_path: The path to precomputed features.
+
+    Raises:
+        ValueError: If neither data_path with data_loading_fn nor precomputed_features_path is provided, or if both are provided.
+    """
+    if bool(data_path and data_loading_fn) == bool(precomputed_features_path):
+        raise ValueError(
+            "You must specify either --data_path with --data_loading_fn OR --precomputed_features_path, but not both or neither.")
 
 
 def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
@@ -816,9 +829,9 @@ def main(parsed_args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Machine Learning Script")
-    parser.add_argument('--data_path', required=True, help='Path to the data file')
+    parser.add_argument('--data_path', type=str, help='Path to the data file')
+    parser.add_argument('--data_loading_fn', choices=DATA_LOADING_FNS.keys(), help='Function identifier for loading data')
     parser.add_argument('--precomputed_features_path', type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
-    parser.add_argument('--data_loading_fn', required=True, choices=DATA_LOADING_FNS.keys(), help='Function identifier for loading data')
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
@@ -847,6 +860,7 @@ if __name__ == "__main__":
     parsed_args = parser.parse_args()
 
     # Additional consistency check
+    check_load_args(parsed_args.data_path, parsed_args.data_loading_fn, parsed_args.precomputed_features_path)
     check_split_args(parsed_args.split_fn, parsed_args.split_ratio, parsed_args.model)
     check_hparams_opt_args(parsed_args.hparams, parsed_args.split_fn, parsed_args.n_folds)
     check_output_args(parsed_args.save_output, parsed_args.output_data_dir, parsed_args.output_model_dir, parsed_args.output_reports_dir, parsed_args.output_figures_dir)
