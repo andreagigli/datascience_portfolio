@@ -91,7 +91,7 @@ portfolio_ML_datascience/
 
 ### Installing the Project Package
 
-1. Navigate to the project's root directory:
+1. **Navigate to the project's root directory**:
       ```
 	  cd path/to/portfolio_ML_datascience/
       ```
