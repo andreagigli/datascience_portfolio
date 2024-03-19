@@ -162,7 +162,8 @@ portfolio_ML_datascience/
 You can run an example analysis, where house prices predictions are performed on the California Housing Dataset:
 
 ```
-cd path/to/portfolio_ML_datascience
+cd path/to/portfolio_ML_datascience 
+git checkout -b sales_prediction
 python analysis_exampledb.py --data_path ../../data/external/m5salesdb/ --data_loading_fn load_m5salesdb --model sklearn_compatible_LGBMRegressor --hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}" --hopt_n_rndcv_samplings 5 --hopt_subsampling_fn subsample_train_m5salesdb --hopt_subsampling_rate 1.0 --preprocessing_fn preprocess_m5salesdb --eda_fn eda_m5salesdb --feature_extraction_fn features_m5salesdb --split_fn split_m5salesdb --prediction_fn predict_m5salesdb --look_back_days_sequential_prediction 380 --evaluation_fn evaluate_m5salesdb --log_level INFO --random_seed 0 --save_output --output_data_dir ../../data/processed/ --output_model_dir ../../models/ --output_reports_dir ../../outputs/reports/ --output_figures_dir ../../outputs/figures/
 ```
 
