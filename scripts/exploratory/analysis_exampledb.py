@@ -5,22 +5,72 @@ Users can specify model parameters, choose to train a new model or use a pre-tra
 
 Example shell calls:
 
+PREFERRED: using LGBMRegressor (handles large datasets, without need to one-hot encode cathegorical variables)
 python analysis_exampledb.py
---data_path ../../data/external/exampledb/california_housing.csv
---data_loading_fn load_exampledb
---model sklearn_RandomForestRegressor
---hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
+--data_path ../../data/external/m5salesdb/
+--data_loading_fn load_m5salesdb
+--model sklearn_compatible_LGBMRegressor
+--hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
 --hopt_n_rndcv_samplings 5
---hopt_subsampling_fn subsampling_passthrough
+--hopt_subsampling_fn subsample_train_m5salesdb
 --hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_passthrough
---eda_fn eda_passthrough
---feature_extraction_fn features_exampledb
---split_fn split_train_test
---split_ratio "80 20"
---n_folds 3
---prediction_fn predict_sklearn
---evaluation_fn evaluate_exampledb
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
+--evaluation_fn evaluate_m5salesdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ../../data/processed/
+--output_model_dir ../../models/
+--output_reports_dir ../../outputs/reports/
+--output_figures_dir ../../outputs/figures/
+
+IF FEATURES WERE PRECOMPUTED:
+python analysis_exampledb.py
+--data_path ../../data/external/m5salesdb/
+--data_loading_fn load_m5salesdb
+--precomputed_features_path ../../data/processed/m5salesdb_debug_100/
+--model sklearn_compatible_LGBMRegressor
+--hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
+--hopt_n_rndcv_samplings 5
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
+--evaluation_fn evaluate_m5salesdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ../../data/processed/
+--output_model_dir ../../models/
+--output_reports_dir ../../outputs/reports/
+--output_figures_dir ../../outputs/figures/
+
+python analysis_exampledb.py
+--data_path ../../data/external/m5salesdb/
+--data_loading_fn load_m5salesdb
+--precomputed_features_path ../../data/processed/m5salesdb_debug_100/
+--model sklearn_Ridge
+--data_transformers sklearn_RBFSampler
+--hparams "{\"sklearn_RBFSampler__n_components\": 1000, \"sklearn_RBFSampler__gamma\": \"loguniform(0.001, 10)\", \"sklearn_Ridge__alpha\": \"loguniform(0.00001, 1)\", }"
+--hopt_n_rndcv_samplings 5
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
+--evaluation_fn evaluate_m5salesdb
 --log_level INFO
 --random_seed 0
 --save_output
@@ -57,12 +107,17 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import SVC
 
+import src.data.data_m5salesdb
 import src.data.load_exampledb
 import src.data.split_train_test
 import src.data.split_train_val_test
+import src.eda.eda_m5salesdb
 import src.evaluation.evaluate_exampledb
+import src.evaluation.evaluate_m5salesdb
 import src.features.features_exampledb
+import src.features.features_m5salesdb
 import src.models.custom_linear_regressor
+import src.prediction.predict_m5salesdb
 from src.eda.eda_misc import plot_correlation_heatmap, plot_pairwise_scatterplots
 from src.optimization.custom_sk_validators import PredefinedSplit
 from src.utils.my_dataframe import convert_df_to_sparse_matrix
@@ -86,19 +141,25 @@ DATA_TRANSFORMERS: Dict[str, Type[Union[TransformerMixin, BaseEstimator]]] = {
 }
 DATA_LOADING_FNS: Dict[str, Callable] = {
     "load_exampledb": src.data.load_exampledb.load_data,
+    "load_m5salesdb": src.data.data_m5salesdb.load_data,
 }
 PREPROCESSING_FNS: Dict[str, Callable] = {
     "preprocess_passthrough": lambda *args, **kwargs: (args, kwargs) if kwargs else args,
+    "preprocess_m5salesdb": src.data.data_m5salesdb.preprocess_data,
 }
 EDA_FNS: Dict[str, Callable] = {
     "eda_passthrough": lambda *args, **kwargs:  None,
+    "eda_m5salesdb": src.eda.eda_m5salesdb.eda,
 }
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_exampledb": src.features.features_exampledb.extract_features,
+    "features_m5salesdb": src.features.features_m5salesdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
+    "split_passthrough": lambda *args, **kwargs: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], {}),
     "split_train_val_test": src.data.split_train_val_test.split_data,
     "split_train_test": src.data.split_train_test.split_data,
+    "split_m5salesdb": src.data.data_m5salesdb.split_data,
 }
 RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'loguniform': loguniform,
@@ -106,15 +167,18 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'uniform': uniform,
 }
 HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
-    "subsampling_passthrough": lambda X, Y, **kwargs: (X, Y, kwargs.get('cv_indices', None)),
+    "subsample_passthrough": lambda X, Y, **kwargs: (X, Y, kwargs.get('cv_indices', None)),
+    "subsample_train_m5salesdb": src.data.data_m5salesdb.subsample_items,
 }
 PREDICTION_FNS: Dict[str, Callable] = {
     "predict_zeros": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (np.zeros_like(Y_test), np.zeros_like(Y_train), None),  # Note: complex signature for consistency across prediction_fns
     "predict_sklearn": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (model.predict(X_test), model.predict(X_train), None),
+    "predict_m5salesdb": src.prediction.predict_m5salesdb.predict,
 }
 EVALUATION_FNS: Dict[str, Callable] = {
     "evaluate_passthrough": lambda *args, **kwargs: (pd.DataFrame(), {}),
     "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
+    "evaluate_m5salesdb": src.evaluation.evaluate_m5salesdb.evaluate,
 }
 
 
@@ -406,8 +470,8 @@ def main(parsed_args: argparse.Namespace) -> None:
         if not isinstance(dataset, tuple):
             dataset = (dataset,)
 
-        # Exploratory data analysis
-        eda_fn(*dataset)
+        # # Exploratory data analysis
+        # eda_fn(*dataset)
 
         # Extract features
         X, Y = extract_features_fn(*dataset)  # X and Y are expected to be pd.DataFrame
@@ -429,7 +493,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     # Explore relationships within features and between features and targets
     plot_correlation_heatmap(X, Y, sample_size=1000, method='pearson')
     plot_correlation_heatmap(X, Y, sample_size=1000, method='spearman')
-    # columns_to_plot = []
+    # columns_to_plot = ["sold", "sell_price", "wday", "sold_robustlag_7", "sold_next_day"]
     # plot_pairwise_scatterplots(X, Y, columns_to_plot=columns_to_plot, sample_size=100)
 
     # Parse split arguments
@@ -759,7 +823,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
     parser.add_argument('--hopt_n_rndcv_samplings', type=int, default=5, help='Number of samplings for RandomSearchCV hyperparameter optimization')
-    parser.add_argument('--hopt_subsampling_fn', default='subsampling_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
+    parser.add_argument('--hopt_subsampling_fn', default='subsample_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
     parser.add_argument('--hopt_subsampling_rate', default=1, type=float, help='Proportion of the original training set retained for hyperparameter optimization')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
     parser.add_argument('--preprocessing_fn', default='preprocess_passthrough', choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
