@@ -163,7 +163,7 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'uniform': uniform,
 }
 HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
-    "subsampling_passthrough": lambda X, Y, **kwargs: (X, Y, kwargs.get('cv_indices', None)),
+    "subsample_passthrough": lambda X, Y, **kwargs: (X, Y, kwargs.get('cv_indices', None)),
     "subsample_train_m5salesdb": src.data.data_m5salesdb.subsample_items,
 }
 PREDICTION_FNS: Dict[str, Callable] = {
@@ -836,7 +836,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
     parser.add_argument('--hopt_n_rndcv_samplings', type=int, default=5, help='Number of samplings for RandomSearchCV hyperparameter optimization')
-    parser.add_argument('--hopt_subsampling_fn', default='subsampling_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
+    parser.add_argument('--hopt_subsampling_fn', default='subsample_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
     parser.add_argument('--hopt_subsampling_rate', default=1, type=float, help='Proportion of the original training set retained for hyperparameter optimization')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
     parser.add_argument('--preprocessing_fn', default='preprocess_passthrough', choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
