@@ -4,12 +4,13 @@ import pandas as pd
 from pandas import DataFrame
 
 
-def load_data(fpath: str) -> Tuple[DataFrame, DataFrame]:
+def load_data(fpath: str, *args, **kwargs) -> Tuple[DataFrame, DataFrame]:
     """
     Loads data from a specified CSV file into DataFrames for features and target variables.
 
     Args:
         fpath (str): The file path to the CSV file containing the dataset.
+        *args and **kwargs: Only included for compatibility with other load_data functions. Will be ignored.
 
     Returns:
         X (DataFrame): A DataFrame containing the features (predictor variables). This includes columns

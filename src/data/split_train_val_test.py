@@ -7,10 +7,7 @@ from sklearn.model_selection import train_test_split
 
 def split_data(X: DataFrame,
                Y: DataFrame,
-               random_seed: Optional[int] = None,
-               train_prc: int = 70,
-               val_prc: int = 15,
-               test_prc: int = 15
+               **kwargs,
                ) -> Tuple[DataFrame, DataFrame,
                           Optional[DataFrame], Optional[DataFrame],
                           DataFrame, DataFrame,
@@ -22,10 +19,11 @@ def split_data(X: DataFrame,
     Args:
         X (DataFrame): DataFrame containing the features.
         Y (DataFrame): DataFrame containing the target variable.
-        train_prc (int): Percentage of the dataset to include in the training set.
-        val_prc (int): Percentage of the dataset to include in the validation set.
-        test_prc (int): Percentage of the dataset to include in the test set.
-        random_seed (Optional[int]): Seed for random number generator to ensure reproducibility.
+        **kwargs:
+            train_prc (int): Percentage of the dataset to include in the training set. Default is 70.
+            val_prc (int): Percentage of the dataset to include in the validation set. Default is 15.
+            test_prc (int): Percentage of the dataset to include in the test set. Default is 15.
+            random_seed (Optional[int]): Seed for random number generator to ensure reproducibility. Default is None.
 
     Returns:
         X_train (DataFrame): Training set features.
@@ -37,7 +35,14 @@ def split_data(X: DataFrame,
         cv_indices (None): Placeholder for cross-validation indices, indicating no cross-validation indices are provided in this function.
         aux_split_params (Dict[str, any]): An empty dictionary, included for conformity with other splitting functions that may return additional optional parameters.
     """
-    assert train_prc + val_prc + test_prc == 100, "Sum of ratios must be 100"
+    # Retrieve arguments from kwargs or assign default values
+    random_seed = kwargs.get('random_seed', None)
+    train_prc = kwargs.get('train_prc', 70)
+    val_prc = kwargs.get('val_prc', 15)
+    test_prc = kwargs.get('test_prc', 15)
+
+    # Verify the consistency of the given split percentages
+    assert train_prc + val_prc + test_prc == 100, "Sum of percentages must be 100"
 
     # Splitting the dataset
     train_size = train_prc / 100
