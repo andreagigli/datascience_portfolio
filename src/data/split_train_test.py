@@ -1,18 +1,13 @@
-from typing import Optional, Tuple, List, Dict
-
 from numpy import ndarray
 from pandas import DataFrame
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
+from typing import Optional, Tuple, List, Dict
 
 
 def split_data(
     X: DataFrame,
     Y: DataFrame,
-    random_seed: Optional[int] = None,
-    train_prc: int = 80,
-    test_prc: int = 20,
-    n_folds: Optional[int] = None,
-    stratified: bool = False
+    **kwargs,
     ) -> Tuple[DataFrame, DataFrame,
                Optional[DataFrame], Optional[DataFrame],
                DataFrame, DataFrame,
@@ -24,22 +19,31 @@ def split_data(
     Args:
         X (DataFrame): DataFrame containing the features.
         Y (DataFrame): DataFrame containing the target variable.
-        random_seed (Optional[int]): Seed for random number generator to ensure reproducibility.
-        train_prc (int): Percentage of the dataset to include in the training set.
-        test_prc (int): Percentage of the dataset to include in the test set.
-        n_folds (Optional[int]): Number of folds for k-fold cross-validation, if applicable.
-        stratified (bool): Whether to perform stratified k-fold cross-validation, relevant for classification tasks.
+        **kwargs: Additional keyword arguments including:
+            - random_seed (Optional[int]): Seed for random number generator to ensure reproducibility.
+            - train_prc (int): Percentage of the dataset to include in the training set. Defaults to 80.
+            - test_prc (int): Percentage of the dataset to include in the test set. Defaults to 20.
+            - n_folds (Optional[int]): Number of folds for k-fold cross-validation, if applicable. None by default.
+            - stratified (bool): Whether to perform stratified k-fold cross-validation, relevant for classification tasks. Defaults to False.
 
     Returns:
         X_train (DataFrame): Training set features.
         Y_train (DataFrame): Training set target variable.
-        X_val (Optional[DataFrame]): Validation set features, if `n_folds` is None (indicative of a hold-out validation set).
-        Y_val (Optional[DataFrame]): Validation set target variable, if `n_folds` is None.
+        X_val (Optional[DataFrame]): Validation set features, if `n_folds` is None (indicative of a hold-out validation set). None if not applicable.
+        Y_val (Optional[DataFrame]): Validation set target variable, if `n_folds` is None. None if not applicable.
         X_test (DataFrame): Test set features.
         Y_test (DataFrame): Test set target variable.
         cv_indices (Optional[List[Tuple[np.ndarray, np.ndarray]]]): List of tuples containing train and validation indices for each fold, if `n_folds` is not None. Useful for cross-validation.
-        aux_split_params (Dict[str, any]): An empty dictionary, included for conformity with other splitting functions that may return additional optional parameters.
+        aux_split_params (Optional[Dict[str, Any]]): An empty dictionary, included for conformity with other splitting functions that may return additional optional parameters.
     """
+    # Retrieve arguments from kwargs or assign default values
+    random_seed = kwargs.get('random_seed', None)
+    train_prc = kwargs.get('train_prc', 80)
+    test_prc = kwargs.get('test_prc', 20)
+    n_folds = kwargs.get('n_folds', None)
+    stratified = kwargs.get('stratified', False)
+
+    # Verify the consistency of the given split percentages
     assert train_prc + test_prc == 100, "Sum of ratios must be 100"
 
     # Splitting the dataset

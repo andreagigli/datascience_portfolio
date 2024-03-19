@@ -64,8 +64,7 @@ def load_data(dpath: str, debug: bool = False) -> Tuple[DataFrame, DataFrame, Da
     return sales, sell_prices, calendar
 
 
-def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd.DataFrame) -> Tuple[
-    pd.DataFrame, pd.DataFrame]:
+def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
     """
     Preprocesses sales, sell prices, and calendar datasets for time series analysis.
 
@@ -395,7 +394,8 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
 
 def split_data(X: pd.DataFrame,
                Y: pd.DataFrame,
-               look_back_days: int = 365
+               # look_back_days: int = 365
+               **kwargs,
                ) -> Tuple[pd.DataFrame, pd.DataFrame,
                           pd.DataFrame, pd.DataFrame,
                           pd.DataFrame, pd.DataFrame,
@@ -418,7 +418,8 @@ def split_data(X: pd.DataFrame,
     Args:
         X (pd.DataFrame): DataFrame containing the features, with 'd' indicating the day.
         Y (pd.DataFrame): DataFrame containing the target variable, aligned with X.
-        look_back_days (int): Number of days prior to the test period to include in the extended test set for feature computation.
+        **kwargs:
+            look_back_days (int): Number of days prior to the test period to include in the extended test set for feature computation.
 
     Returns:
         X_train (pd.DataFrame): Features for the training set.
@@ -429,6 +430,11 @@ def split_data(X: pd.DataFrame,
         Y_test (pd.DataFrame): Target variable for the actual test period, not including the look-back days.
         aux_split_params (Optional[Dict[str, any]]): Additional parameters like 'start_day_for_prediction' that may be useful for prediction.
     """
+    # Checking required arguments
+    look_back_days = kwargs.get('look_back_days_sequential_prediction', None)
+    if look_back_days is None or look_back_days < 0:
+        raise ValueError("look_back_days_sequential_prediction must be provided (>=0).")
+
     # Note: 'Y' is assumed to have a multi-index of ('id', 'd') and a column 'sold_next_day'. Resetting the index is not necessary
     X_train = X.loc[(slice(None), slice(None, 1911)), :]
     Y_train = Y.loc[(slice(None), slice(None, 1911)), :]

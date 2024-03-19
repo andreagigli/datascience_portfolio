@@ -19,6 +19,7 @@ python analysis_exampledb.py
 --feature_extraction_fn features_m5salesdb
 --split_fn split_m5salesdb
 --prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
 --evaluation_fn evaluate_m5salesdb
 --log_level INFO
 --random_seed 0
@@ -43,6 +44,7 @@ python analysis_exampledb.py
 --feature_extraction_fn features_m5salesdb
 --split_fn split_m5salesdb
 --prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
 --evaluation_fn evaluate_m5salesdb
 --log_level INFO
 --random_seed 0
@@ -67,6 +69,7 @@ python analysis_exampledb.py
 --feature_extraction_fn features_m5salesdb
 --split_fn split_m5salesdb
 --prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
 --evaluation_fn evaluate_m5salesdb
 --log_level INFO
 --random_seed 0
@@ -77,23 +80,21 @@ python analysis_exampledb.py
 --output_figures_dir ../../outputs/figures/
 
 """
-
 import argparse
 import inspect
 import json
 import logging
-import warnings
-
-import matplotlib.pyplot as plt
-import numpy as np
 import os
-import pandas as pd
 import pickle
 import re
 import sys
-
+import warnings
 from datetime import datetime
+from typing import Any, Callable, Dict, Optional, Type, Union
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from lightgbm import LGBMRegressor
 from scipy.sparse import csr_matrix
 from scipy.stats import loguniform, randint, uniform, rv_continuous, rv_discrete
@@ -103,22 +104,21 @@ from sklearn.kernel_approximation import RBFSampler
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import SVC
-from typing import Dict, Any, Union, Optional, Type, Callable
 
 import src.data.data_m5salesdb
 import src.data.load_exampledb
-import src.data.split_train_val_test
 import src.data.split_train_test
+import src.data.split_train_val_test
 import src.eda.eda_m5salesdb
 import src.evaluation.evaluate_exampledb
 import src.evaluation.evaluate_m5salesdb
+import src.features.features_exampledb
 import src.features.features_m5salesdb
 import src.models.custom_linear_regressor
 import src.prediction.predict_m5salesdb
 from src.eda.eda_misc import plot_correlation_heatmap, plot_pairwise_scatterplots
-
 from src.optimization.custom_sk_validators import PredefinedSplit
 from src.utils.my_dataframe import convert_df_to_sparse_matrix
 from src.utils.my_os import ensure_dir_exists
@@ -144,7 +144,7 @@ DATA_LOADING_FNS: Dict[str, Callable] = {
     "load_m5salesdb": src.data.data_m5salesdb.load_data,
 }
 PREPROCESSING_FNS: Dict[str, Callable] = {
-    "preprocess_passthrough": lambda *args, **kwargs:  (args, kwargs),
+    "preprocess_passthrough": lambda *args, **kwargs: (args, kwargs) if kwargs else args,
     "preprocess_m5salesdb": src.data.data_m5salesdb.preprocess_data,
 }
 EDA_FNS: Dict[str, Callable] = {
@@ -152,7 +152,7 @@ EDA_FNS: Dict[str, Callable] = {
     "eda_m5salesdb": src.eda.eda_m5salesdb.eda,
 }
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
-    "features_passthrough": lambda *args, **kwargs:  (pd.DataFrame(), pd.DataFrame()),
+    "features_exampledb": src.features.features_exampledb.extract_features,
     "features_m5salesdb": src.features.features_m5salesdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
@@ -167,12 +167,12 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'uniform': uniform,
 }
 HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
-    "hopt_subsampling_passthrough": lambda *args, **kwargs: args,
+    "subsampling_passthrough": lambda X, Y, **kwargs: (X, Y, kwargs.get('cv_indices', None)),
     "subsample_train_m5salesdb": src.data.data_m5salesdb.subsample_items,
 }
 PREDICTION_FNS: Dict[str, Callable] = {
-    "predict_zeros": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (np.zeros_like(Y_test), np.zeros_like(Y_train)),  # Note: complex signature for consistency across prediction_fns
-    "predict_sklearn": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (model.predict(X_test), model.predict(X_train)),
+    "predict_zeros": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (np.zeros_like(Y_test), np.zeros_like(Y_train), None),  # Note: complex signature for consistency across prediction_fns
+    "predict_sklearn": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (model.predict(X_test), model.predict(X_train), None),
     "predict_m5salesdb": src.prediction.predict_m5salesdb.predict,
 }
 EVALUATION_FNS: Dict[str, Callable] = {
@@ -444,6 +444,7 @@ def main(parsed_args: argparse.Namespace) -> None:
     eda_fn = EDA_FNS.get(parsed_args.eda_fn)
     extract_features_fn = FEATURE_EXTRACTION_FNS.get(parsed_args.feature_extraction_fn)
     split_data_fn = SPLITTING_FNS.get(parsed_args.split_fn)
+    aux_split_params = {}
     hopt_subsampling_fn = HOPT_SUBSAMPLING_FNS.get(parsed_args.hopt_subsampling_fn)
     predict_fn = PREDICTION_FNS.get(parsed_args.prediction_fn)
     aux_predict_params = {}
@@ -460,14 +461,20 @@ def main(parsed_args: argparse.Namespace) -> None:
     if parsed_args.precomputed_features_path is None:
         # Load data
         logger.info("Loading data and extracting features...")
-        sales, sell_prices, calendar = load_data_fn(parsed_args.data_path, debug=False)  # Set debug=True to select a subset of the items (faster computation)
-        sales = preprocess_fn(sales, sell_prices, calendar)
+        dataset = load_data_fn(parsed_args.data_path, debug=False)  # Set debug=True to select a subset of the items (faster computation)
+        if not isinstance(dataset, tuple):
+            dataset = (dataset,)
+
+        # Preprocess data
+        dataset = preprocess_fn(*dataset)
+        if not isinstance(dataset, tuple):
+            dataset = (dataset,)
 
         # # Exploratory data analysis
-        # _ = eda_fn(sales)
+        # eda_fn(*dataset)
 
         # Extract features
-        X, Y = extract_features_fn(sales)  # X and Y are expected to be pd.DataFrame
+        X, Y = extract_features_fn(*dataset)  # X and Y are expected to be pd.DataFrame
 
         if parsed_args.save_output:
             logger.info("Storing computed features...")
@@ -476,7 +483,7 @@ def main(parsed_args: argparse.Namespace) -> None:
             os.makedirs(output_dir, exist_ok=True)
             X.to_pickle(os.path.join(output_dir, "X.pkl"))
             Y.to_pickle(os.path.join(output_dir, "Y.pkl"))
-        del sales, sell_prices, calendar
+        del dataset
 
     else:
         # Reload the pre-computed features
@@ -486,19 +493,37 @@ def main(parsed_args: argparse.Namespace) -> None:
     # Explore relationships within features and between features and targets
     plot_correlation_heatmap(X, Y, sample_size=1000, method='pearson')
     plot_correlation_heatmap(X, Y, sample_size=1000, method='spearman')
-    plot_pairwise_scatterplots(X, Y, columns_to_plot=["sold", "sell_price", "wday", "sold_robustlag_7", "sold_next_day"], sample_size=100)
+    # columns_to_plot = ["sold", "sell_price", "wday", "sold_robustlag_7", "sold_next_day"]
+    # plot_pairwise_scatterplots(X, Y, columns_to_plot=columns_to_plot, sample_size=100)
+
+    # Parse split arguments
+    if parsed_args.split_ratio is not None:  # Parse the split_ratio if provided
+        split_ratios = [int(item) for item in parsed_args.split_ratio.split()]
+        if len(split_ratios) != 2 and len(split_ratios) != 3:
+            raise ValueError("split_ratio must include two or three integers for train-test or train-val-test percentages.")
+        aux_split_params["train_prc"] = split_ratios[0]
+        # Assign val_prc only if there are 3 values, otherwise set it to 0 or None based on your logic preference
+        aux_split_params["val_prc"] = split_ratios[1] if len(split_ratios) == 3 else 0
+        # Assign test_prc based on the number of ratios provided
+        aux_split_params["test_prc"] = split_ratios[2] if len(split_ratios) == 3 else split_ratios[1]
+    else:
+        aux_split_params["train_prc"] = None
+        aux_split_params["val_prc"] = None
+        aux_split_params["test_prc"] = None
+    aux_split_params["n_folds"] = parsed_args.n_folds
+    aux_split_params['stratified'] = parsed_args.stratified_kfold
+    aux_split_params["random_seed"] = parsed_args.random_seed
+    aux_split_params["look_back_days_sequential_prediction"] = parsed_args.look_back_days_sequential_prediction
 
     # Split data
-    aux_split_params = {}
-    if parsed_args.split_fn != "split_passthrough":
-        logger.info("Computing data splits...")
-        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params = split_data_fn(X, Y)
-    else:
-        X_train, Y_train, X_val, Y_val, X_test, Y_test, cv_indices, aux_split_params = src.data.split_train_test.split_data(X, Y, random_seed=0)  # Only here for completeness. Normally, it is expected that the loaded data is already split
-
+    (X_train, Y_train,
+     X_val, Y_val,
+     X_test, Y_test,
+     cv_indices,
+     optional_split_info) = split_data_fn(X, Y, **aux_split_params)
     # Accumulate potential split parameters to the predict parameters as they may be useful for the prediction function
-    if aux_split_params:
-        aux_predict_params.update(aux_split_params)
+    if optional_split_info:
+        aux_predict_params.update(optional_split_info)
 
     # Optimize hyperparameters and train model, distinguishing between sklearn and pytorch/tensorflow pipeline
     if "sklearn" in MODELS.get(parsed_args.model).__module__:
@@ -565,9 +590,13 @@ def main(parsed_args: argparse.Namespace) -> None:
             if X_val is None and Y_val is None and cv_indices is not None:
                 cv = cv_indices
                 # Optionally subsample the training set and shallow copy it into X_tmp and Y_tmp for consistency with case 2
-                X_tmp, Y_tmp, cv_indices = hopt_subsampling_fn(X_train, Y_train, cv_indices=cv_indices,
-                                                                 subsampling_rate=parsed_args.hopt_subsampling_rate,
-                                                                 random_seed=parsed_args.random_seed)
+                X_tmp, Y_tmp, cv_indices = hopt_subsampling_fn(
+                    X_train,
+                    Y_train,
+                    cv_indices=cv_indices,
+                    subsampling_rate=parsed_args.hopt_subsampling_rate,
+                    random_seed=parsed_args.random_seed,
+                )
                 n_folds = len(cv_indices)
 
             # Case 2: Use a predefined validation set when provided, ignoring cv_indices
@@ -576,14 +605,16 @@ def main(parsed_args: argparse.Namespace) -> None:
                 X_train_subsampled, Y_train_subsampled, _ = hopt_subsampling_fn(
                     X_train,
                     Y_train,
+                    cv_indices=cv_indices,
                     subsampling_rate=parsed_args.hopt_subsampling_rate,
-                    random_seed=parsed_args.random_seed
+                    random_seed=parsed_args.random_seed,
                 )
                 X_val_subsampled, Y_val_subsampled, _ = hopt_subsampling_fn(
                     X_val,
                     Y_val,
+                    cv_indices=cv_indices,
                     subsampling_rate=parsed_args.hopt_subsampling_rate,
-                    random_seed=parsed_args.random_seed
+                    random_seed=parsed_args.random_seed,
                 )
 
                 # Combine training and validation datasets for use in scikit-learn's model selection tools
@@ -792,16 +823,17 @@ if __name__ == "__main__":
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
     parser.add_argument('--hopt_n_rndcv_samplings', type=int, default=5, help='Number of samplings for RandomSearchCV hyperparameter optimization')
-    parser.add_argument('--hopt_subsampling_fn', default='hopt_subsampling_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
+    parser.add_argument('--hopt_subsampling_fn', default='subsampling_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
     parser.add_argument('--hopt_subsampling_rate', default=1, type=float, help='Proportion of the original training set retained for hyperparameter optimization')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
     parser.add_argument('--preprocessing_fn', default='preprocess_passthrough', choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
     parser.add_argument('--eda_fn', default='eda_passthrough', choices=EDA_FNS.keys(), help='Identifier for exploratory data analysis function')
-    parser.add_argument('--feature_extraction_fn', default='features_passthrough', choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
-    parser.add_argument('--split_fn', default='split_passthrough', choices=SPLITTING_FNS.keys(), help='Identifier for data split function')
+    parser.add_argument('--feature_extraction_fn', default='features_exampledb', choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
+    parser.add_argument('--split_fn', default='split_train_val_test', choices=SPLITTING_FNS.keys(), help='Identifier for data split function')
     parser.add_argument('--split_ratio', type=str, help='Ratio for splitting data')
     parser.add_argument('--n_folds', type=int, help='Number of folds for k-fold cross-validation')
     parser.add_argument('--stratified_kfold', action='store_true', help='Whether to perform stratified (for clf) or standard (for reg or clf) k-fold cross-validation')
+    parser.add_argument('--look_back_days_sequential_prediction', type=int, default=0, help='Number of look-back days used in sequential multi-day time series forecasting for computing features at prediction time.')
     parser.add_argument('--prediction_fn', default='predict_zeros', help='Identifier for prediction function')
     parser.add_argument('--evaluation_fn', default='evaluate_passthrough', choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
     parser.add_argument('--log_level', type=str, default='INFO', help='Logging level (e.g., "INFO", "DEBUG")')
