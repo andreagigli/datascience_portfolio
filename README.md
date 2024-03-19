@@ -91,14 +91,19 @@ portfolio_ML_datascience/
 
 ### Installing the Project Package
 
-1. **Generate the `requirements.txt` file (optional)**:
+1. Navigate to the project's root directory:
+      ```
+	  cd path/to/portfolio_ML_datascience/
+      ```
+
+2. **Generate the `requirements.txt` file (optional)**:
     - If your project does not already have a `requirements.txt`, or if you want to update it, run `pipreqs`:
       ```
-	  cd portfolio_ML_datascience
+	  cd portfolio_ML_datascience/
       pipreqs --force . 
       ```
 
-2. **Install the package**:
+3. **Install the package**:
     - For a standard installation:
       ```
       pip install .
@@ -110,8 +115,17 @@ portfolio_ML_datascience/
       The editable installation allows you to modify the code and see the changes without reinstalling the package.
 	  
 
+## Try It Out-of-the-Box
 
-## Usage
+You can run an example analysis, where house prices predictions are performed on the California Housing Dataset:
+
+```
+cd path/to/portfolio_ML_datascience
+python analysis_exampledb.py --data_path ../../data/external/exampledb/california_housing.csv --data_loading_fn load_exampledb --model sklearn_RandomForestRegressor --hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}" --hopt_n_rndcv_samplings 5 --hopt_subsampling_fn subsample_passthrough --hopt_subsampling_rate 1.0 --preprocessing_fn preprocess_passthrough --eda_fn eda_passthrough --feature_extraction_fn features_exampledb --split_fn split_train_test --split_ratio "80 20" --n_folds 3 --prediction_fn predict_sklearn --evaluation_fn evaluate_exampledb --log_level INFO --random_seed 0 --save_output --output_data_dir ../../data/processed/ --output_model_dir ../../models/ --output_reports_dir ../../outputs/reports/ --output_figures_dir ../../outputs/figures/
+```
+
+
+## Conduct a New Analysys
 
 To conduct a data analysis within this framework, follow these steps for each new project. Here the database `newdb` is used as an example.
 
@@ -208,9 +222,82 @@ EVALUATION_FNS = {
 ```
 
 
-### Run
+### Notes on Running a New Analysis
 
-1. **Execute the analysis script with this command**:  
+Take these notes into account when defining the command line instructions for a new analysis:
+
+* **Functions that Must Be Implemented**: For a new dataset, `newdb`, you MUST implement and specify functions for:
+  ```
+  --data_loading_fn load_newdb`
+  --feature_extraction_fn features_newdb`
+  --evaluation_fn evaluate_newdb`
+  ```
+
+* **Functions that Can Be Re-Implemented**: Default functions are available for other steps:
+  ```
+  --hopt_subsampling_fn subsample_passthrough
+  --preprocessing_fn preprocess_passthrough
+  --eda_fn eda_passthrough
+  ```
+  - The `--split_fn` argument must be given a function_id, such as `split_train_test`, `split_train_val_test`, or a custom one. 
+  - The `--prediction_fn` argument must also be given a function_id, such as `predict_zeros`, `predict_sklearn` (for sklearn-compatible models), or a custom one. 
+
+* **Data Splitting Modality**: The data splitting modality can be regulated through the arguments `split_fn`, `split_ratio`, and `n_folds`. 
+  - For scenarios without hyperparameter optimization (hopt):
+    ```
+    --split_fn split_train_test 
+    --split_ratio "80 20"
+    ```
+  - For hyperparameter optimization, utilize:
+    - K-fold cross-validation:
+      ```
+      --split_fn split_train_test 
+      --split_ratio "80 20" 
+      --n_folds 3
+      ```
+    - Or a fixed split:
+      ```
+      --split_fn split_train_val_test 
+      --split_ratio "70 15 15"
+      ```
+
+* **Hyperparameter Optimization (hopt)**: Hopt is triggered if there are distribution strings among the provided `hparams` values. 
+  - Example triggering hopt:
+    ```
+    --hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
+    ```
+  - Example not triggering hopt:
+    ```
+    --hparams "{\"sklearn_RandomForestRegressor__n_estimators\":150, \"sklearn_RandomForestRegressor__max_depth\": 10}"
+    ```
+  - During hopt, the arguments `--hopt_n_rndcv_samplings` determine the number of random samplings of the hyperparameters to be optimized, and `--hopt_subsampling_fn` along with `--hopt_subsampling_rate` are used to subsample the training data to save on computation.
+
+* **Precomputed Features**: To reload precomputed features, provide:
+  ```
+  --precomputed_features_path ../../data/processed/newdb/
+  ```
+  instead of the standard:
+  ```
+  --data_path ../../data/external/m5salesdb/ 
+  --data_loading_fn load_m5salesdb
+  ```
+
+* **Outputs**: To save outputs, include the following parameters:
+  ```
+  --save_output 
+  --output_data_dir ../../data/processed/ 
+  --output_model_dir ../../models/ 
+  --output_reports_dir ../../outputs/reports/ 
+  --output_figures_dir ../../outputs/figures/
+  ```
+  
+  - Outputs such as reports, figures, and model summaries are stored in directories named after a unique run identifier (typically a timestamp), e.g., `outputs/reports/run_id/` for reports and figures, `models/model_summaries/run_id/` and `models/trained_models/run_id/` for trained models. 
+  - Extracted features (processed data) should be stored in `data/processed/newdb/` for quick reloading. This path can be specified through the corresponding command line argument --precomputed_features_path.
+
+    
+### Example Use Cases
+
+- This example launches a custom analysis on a new dataset `newdb`. 
 ```
 python analysis_newdb.py
 --data_path data/external/newdb/
@@ -236,9 +323,48 @@ python analysis_newdb.py
 ```
 
 
-2. **Output Organization and Processed Data Handling**
-- Outputs such as reports, figures, and model summaries are stored in directories named after a unique run identifier (typically a timestamp), e.g., `outputs/reports/run_id/` for reports and figures, `models/model_summaries/run_id/` and `models/trained_models/run_id/` for trained models. 
-- Extracted features (processed data) should be stored in `data/processed/newdb/` for quick reloading. This path can be specified through the corresponding command line argument --precomputed_features_path.
+- This example demonstrates a straightforward analysis pipeline (custom load data, no preprocessing, eda, custom feature_extraction, split_train_test, no hopt, sklearn prediction, custom evaluation):
+```
+python analysis_newdb.py 
+--data_path data/external/newdb/ 
+--data_loading_fn load_newdb 
+--model sklearn_RandomForestClassifier 
+--preprocessing_fn preprocess_passthrough 
+--eda_fn eda_passthrough 
+--feature_extraction_fn features_newdb 
+--split_fn split_train_test 
+--split_ratio "80 20" 
+--prediction_fn predict_sklearn 
+--evaluation_fn evaluate_newdb 
+--log_level INFO 
+--random_seed 0
+```
+
+
+- This example demonstrates a more complex analysis pipeline (reload precomputed features, custom preprocessing, eda, feature extraction, split, hopt, prediction, evaluation):
+```
+python analysis_newdb.py 
+--precomputed_features_path data/processed/newdb/ 
+--model sklearn_RandomForestClassifier 
+--hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
+--hopt_n_rndcv_samplings 5 
+--hopt_subsampling_fn subsample_newdb
+--hopt_subsampling_rate 1.0 
+--preprocessing_fn preprocess_newdb 
+--eda_fn eda_newdb 
+--feature_extraction_fn extract_features_newdb 
+--split_fn split_train_val_test 
+--split_ratio "70 15 15" 
+--prediction_fn predict_newdb 
+--evaluation_fn evaluate_newdb 
+--log_level INFO 
+--random_seed 0 
+--save_output
+--output_data_dir data/processed/ 
+--output_model_dir models/ 
+--output_reports_dir outputs/reports/ 
+--output_figures_dir outputs/figures/
+```
 
 
 

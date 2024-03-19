@@ -11,7 +11,7 @@ python analysis_exampledb.py
 --model sklearn_RandomForestRegressor
 --hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
 --hopt_n_rndcv_samplings 5
---hopt_subsampling_fn subsampling_passthrough
+--hopt_subsampling_fn subsample_passthrough
 --hopt_subsampling_rate 1.0
 --preprocessing_fn preprocess_passthrough
 --eda_fn eda_passthrough
@@ -106,7 +106,7 @@ RAND_DISTR_FNS: Dict[str, Type[Union[rv_continuous, rv_discrete]]] = {
     'uniform': uniform,
 }
 HOPT_SUBSAMPLING_FNS: Dict[str, Callable] = {
-    "subsampling_passthrough": lambda X, Y, **kwargs: (X, Y, kwargs.get('cv_indices', None)),
+    "subsample_passthrough": lambda X, Y, **kwargs: (X, Y, kwargs.get('cv_indices', None)),
 }
 PREDICTION_FNS: Dict[str, Callable] = {
     "predict_zeros": lambda model, X_test, Y_test, X_train, Y_train, *args, **kwargs: (np.zeros_like(Y_test), np.zeros_like(Y_train), None),  # Note: complex signature for consistency across prediction_fns
@@ -759,19 +759,19 @@ if __name__ == "__main__":
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
     parser.add_argument('--hopt_n_rndcv_samplings', type=int, default=5, help='Number of samplings for RandomSearchCV hyperparameter optimization')
-    parser.add_argument('--hopt_subsampling_fn', default='subsampling_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
+    parser.add_argument('--hopt_subsampling_fn', default='subsample_passthrough', choices=HOPT_SUBSAMPLING_FNS.keys(), help='Identifier for training set subsampling function')
     parser.add_argument('--hopt_subsampling_rate', default=1, type=float, help='Proportion of the original training set retained for hyperparameter optimization')
     parser.add_argument('--reuse_model', help='Path to a pre-trained model to reuse')
     parser.add_argument('--preprocessing_fn', default='preprocess_passthrough', choices=PREPROCESSING_FNS.keys(), help='Identifier for preprocessing function')
     parser.add_argument('--eda_fn', default='eda_passthrough', choices=EDA_FNS.keys(), help='Identifier for exploratory data analysis function')
-    parser.add_argument('--feature_extraction_fn', default='features_exampledb', choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
-    parser.add_argument('--split_fn', default='split_train_val_test', choices=SPLITTING_FNS.keys(), help='Identifier for data split function')
+    parser.add_argument('--feature_extraction_fn', required=True, choices=FEATURE_EXTRACTION_FNS.keys(), help='Identifier for feature extraction function')
+    parser.add_argument('--split_fn', required=True, choices=SPLITTING_FNS.keys(), help='Identifier for data split function')
     parser.add_argument('--split_ratio', type=str, help='Ratio for splitting data')
     parser.add_argument('--n_folds', type=int, help='Number of folds for k-fold cross-validation')
     parser.add_argument('--stratified_kfold', action='store_true', help='Whether to perform stratified (for clf) or standard (for reg or clf) k-fold cross-validation')
     parser.add_argument('--look_back_days_sequential_prediction', type=int, default=0, help='Number of look-back days used in sequential multi-day time series forecasting for computing features at prediction time.')
     parser.add_argument('--prediction_fn', default='predict_zeros', help='Identifier for prediction function')
-    parser.add_argument('--evaluation_fn', default='evaluate_passthrough', choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
+    parser.add_argument('--evaluation_fn', required=True, choices=EVALUATION_FNS.keys(), help='Identifier for evaluation function')
     parser.add_argument('--log_level', type=str, default='INFO', help='Logging level (e.g., "INFO", "DEBUG")')
     parser.add_argument('--random_seed', type=int, default=None, help='Seed for random number generators for reproducibility')
     parser.add_argument('--run_id', type=str, default=datetime.now().strftime("%Y%m%d_%H%M%S"), help='Unique identifier for the run')
