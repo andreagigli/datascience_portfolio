@@ -4,8 +4,8 @@
 
 ## Description
 
-This package provides a modular framework for managing multiple data analysis projects. 
-Users can initiate projects in isolated branches, leveraging both pre-built and customizable Python modules.
+This package provides a custom modular framework for managing multiple data analysis projects. 
+New projects can be initiated in isolated branches, leveraging both pre-built and customizable Python modules.
 
 
 
