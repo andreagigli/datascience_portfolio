@@ -24,17 +24,17 @@ The car company then evaluates the profitability of a car taking into account if
 To calculate the yearly payments, the car company first predicts the expected residual value (V_r) using machine learning. This prediction defines the total expected depreciation (D = V_0 - V_r, with V_0 being the initial value) and the yearly depreciation component (D/T) of the payment.
 
 Then, the yearly payment can be calculated as follows: 
-P_t = Yearly Depreciation + Yearly Interest + Yearly Profit = (D/T) + (V_0 - \sum_{i=1}^{t-1} P_i) r + Profit Component
+P_t = Yearly Depreciation + Yearly Interest + Yearly Profit = (D/T) + (V_0 - \sum_{i=1}^{t-1} P_i) * r + Profit Component
 
 Where:
 - **Yearly Depreciation (D/T)**: The amount the vehicle value decreases each year.
-- **Yearly Interest (V_0 - \sum_{i=1}^{t-1} P_i) r**: Interest on the remaining balance, with r being the interest rate.
+- **Yearly Interest (V_0 - \sum_{i=1}^{t-1} P_i) * r**: Interest on the remaining balance, with r being the interest rate.
 - **Profit Component**: Adjusted per the company’s profit strategy, either as a fixed amount or a percentage of the yearly payment.
 
 ### Example:
 For a vehicle with an initial value of (V_0 = 30000€), expected total depreciation (D = 12000€) over a 4-year lease term (T = 4), and an interest rate (r) of 5%:
 - **Depreciation Component**: (12000/4 = 3000€) per year.
-- **Interest Component** for the first year: (30000 - 0) 0.05 = 1500€.
+- **Interest Component** for the first year: (30000 - 0) * 0.05 = 1500€.
 - **Profit Component**: Assuming a fixed amount of 500€ per year.
 
 Thus, the first year's payment (P_1) would total (3000€ + 1500€ + 500€ = 5000€). This process can be repeated for all T years of the lease and the overall payments and residual values are compared to those of similar cars and to those of the same car by other lessors to evaluate the car's profitability. 
