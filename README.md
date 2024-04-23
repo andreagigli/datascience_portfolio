@@ -1,7 +1,8 @@
 # Data Science Use Case: Residual Margin Risk Management in Car Leasing
 
 ## Project Description
-Since it was not possible to identify publicly available datasets for residual margin risk management in car leasing, this project focuses on summarizing theoretical and practical insights learned on this topic. 
+This repository provides a summary of theoretical and practical findings on residual margin risk management in vehicle leasing.
+A data science project was not possible as no publicly available data set was found for this task. 
 
 Reference articles include:
 * [Kim, Mihye, et al. "Trustworthy residual vehicle value prediction for auto finance." AI Magazine 44.4 (2023): 394-405.](https://onlinelibrary.wiley.com/doi/full/10.1002/aaai.12136)
