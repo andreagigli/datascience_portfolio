@@ -4,22 +4,22 @@ It allows for dynamic loading of data, preprocessing, eda, feature extraction, m
 Users can specify model parameters, choose to train a new model or use a pre-trained one, control data splitting for training and testing, and whether to save the outputs or not.
 
 Example CLI call:
-python analysis_exampledb.py
---data_path ../../data/external/exampledb/california_housing.csv
---data_loading_fn load_exampledb
---model sklearn_RandomForestRegressor
---hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
---hopt_n_rndcv_samplings 5
+python german_credit_risk_db.py
+--data_path ../../data/external/gcrdb/gcrdb.csv
+--data_loading_fn load_gcrdb
+--model sklearn_compatible_LGBMClassifier
+--hparams "{\"sklearn_compatible_LGBMClassifier__n_estimators\": \"randint(100, 500)\"}"
+--hopt_n_rndcv_samplings 3
 --hopt_subsampling_fn subsampling_passthrough
 --hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_passthrough
---eda_fn eda_passthrough
---feature_extraction_fn features_exampledb
+--preprocessing_fn preprocess_gcrdb
+--eda_fn eda_gcrdb
+--feature_extraction_fn features_gcrdb
 --split_fn split_train_test
 --split_ratio "80 20"
 --n_folds 3
 --prediction_fn predict_sklearn
---evaluation_fn evaluate_exampledb
+--evaluation_fn evaluate_gcrdb
 --log_level INFO
 --random_seed 0
 --save_output
@@ -44,7 +44,7 @@ from typing import Any, Callable, Dict, Optional, Type, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMRegressor
+from lightgbm import LGBMRegressor, LGBMClassifier
 from scipy.sparse import csr_matrix
 from scipy.stats import loguniform, randint, uniform, rv_continuous, rv_discrete
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -56,14 +56,18 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import SVC
 
-import src.data.data_m5salesdb
 import src.data.load_exampledb
+import src.data.data_gcrdb
+import src.data.data_m5salesdb
 import src.data.split_train_test
 import src.data.split_train_val_test
+import src.eda.eda_gcrdb
 import src.eda.eda_m5salesdb
 import src.evaluation.evaluate_exampledb
+import src.evaluation.evaluate_gcrdb
 import src.evaluation.evaluate_m5salesdb
 import src.features.features_exampledb
+import src.features.features_gcrdb
 import src.features.features_m5salesdb
 import src.models.custom_linear_regressor
 import src.prediction.predict_m5salesdb
@@ -81,6 +85,7 @@ MODELS: Dict[str, Type[BaseEstimator]] = {
     "sklearn_RandomForestRegressor": RandomForestRegressor,
     "sklearn_HistGradientBoostingRegressor": HistGradientBoostingRegressor,
     "sklearn_compatible_LGBMRegressor": LGBMRegressor,
+    "sklearn_compatible_LGBMClassifier": LGBMClassifier,
     "mymodel": src.models.custom_linear_regressor.CustomModel,
 }
 DATA_TRANSFORMERS: Dict[str, Type[Union[TransformerMixin, BaseEstimator]]] = {
@@ -91,18 +96,22 @@ DATA_TRANSFORMERS: Dict[str, Type[Union[TransformerMixin, BaseEstimator]]] = {
 DATA_LOADING_FNS: Dict[str, Callable] = {
     "load_exampledb": src.data.load_exampledb.load_data,
     "load_m5salesdb": src.data.data_m5salesdb.load_data,
+    "load_gcrdb": src.data.data_gcrdb.load_data,
 }
 PREPROCESSING_FNS: Dict[str, Callable] = {
     "preprocess_passthrough": lambda *args, **kwargs: (args, kwargs) if kwargs else args,
     "preprocess_m5salesdb": src.data.data_m5salesdb.preprocess_data,
+    "preprocess_gcrdb": src.data.data_gcrdb.preprocess_data,
 }
 EDA_FNS: Dict[str, Callable] = {
     "eda_passthrough": lambda *args, **kwargs:  None,
     "eda_m5salesdb": src.eda.eda_m5salesdb.eda,
+    "eda_gcrdb": src.eda.eda_gcrdb.eda,
 }
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_exampledb": src.features.features_exampledb.extract_features,
     "features_m5salesdb": src.features.features_m5salesdb.extract_features,
+    "features_gcrdb": src.features.features_m5salesdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
     "split_passthrough": lambda *args, **kwargs: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], {}),
@@ -127,6 +136,7 @@ EVALUATION_FNS: Dict[str, Callable] = {
     "evaluate_passthrough": lambda *args, **kwargs: (pd.DataFrame(), {}),
     "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
     "evaluate_m5salesdb": src.evaluation.evaluate_m5salesdb.evaluate,
+    "evaluate_gcrdb": src.evaluation.evaluate_gcrdb.evaluate,
 }
 
 
