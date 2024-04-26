@@ -416,11 +416,11 @@ def main(parsed_args: argparse.Namespace) -> None:
     evaluate_fn = EVALUATION_FNS.get(parsed_args.evaluation_fn)
     aux_eval_params = {}
 
-    # Initialize model or reload existing one
-    model = init_reload_model(parsed_args)
-
     # Save the extract_feature_fn into the predict parameters as it may be necessary for some custom prediction function, such as sequential prediction
     aux_predict_params["extract_features_fn"] = extract_features_fn
+    
+    # Initialize model or reload existing one
+    model = init_reload_model(parsed_args)
 
     # Load data and extract features, or reload previously computed features
     if parsed_args.precomputed_features_path is None:
@@ -435,8 +435,8 @@ def main(parsed_args: argparse.Namespace) -> None:
         if not isinstance(dataset, tuple):
             dataset = (dataset,)
 
-        # # Exploratory data analysis
-        # eda_fn(*dataset)
+        # Exploratory data analysis
+        eda_fn(*dataset)
 
         # Extract features
         X, Y = extract_features_fn(*dataset)  # X and Y are expected to be pd.DataFrame
