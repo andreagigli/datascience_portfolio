@@ -2,7 +2,9 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from typing import Optional, List
+from typing import Optional, List, Tuple
+
+from scipy.stats import skew, kurtosis
 
 
 def plot_correlation_heatmap(X: pd.DataFrame,
@@ -54,6 +56,54 @@ def plot_correlation_heatmap(X: pd.DataFrame,
     plt.suptitle(title)
 
     return fig
+
+
+def plot_data_distribution(df: pd.DataFrame, columns: Optional[List[str]] = None) -> Tuple[plt.Figure, plt.Figure]:
+    """
+    Generates a single figure with vertical violin plots for continuous variables, including skewness and kurtosis,
+    and another figure with count plots for discrete variables in the DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame containing the data.
+        columns (List[str], optional): List of columns to include in the plots. Defaults to all columns.
+
+    Returns:
+        Tuple[plt.Figure, plt.Figure]: A tuple containing the handles to the figures for continuous and discrete variables respectively.
+    """
+    if columns is None:
+        columns = df.columns.tolist()
+
+    # Determine which columns are continuous and which are discrete
+    continuous_vars = [col for col in columns if df[col].nunique() > 10]  # Arbitrary cutoff for example
+    discrete_vars = [col for col in columns if df[col].nunique() <= 10]
+
+    # Create figure for continuous variables
+    fig_cont, axs_cont = plt.subplots(nrows=len(continuous_vars), figsize=(10, 5 * len(continuous_vars)))
+    plt.suptitle("Distribution of the Continuous Variables")
+    if len(discrete_vars) == 1:  # Handle case of single subplot by making it iterable
+        axs_cont = [axs_cont]
+    for i, var in enumerate(continuous_vars):
+        axs_cont[i].set_title(f'{var} Distribution')
+        sns.violinplot(data=df, x=var, ax=axs_cont[i], inner=None, orient="h", color='lightgray')  # Violin plot without inner annotations
+        sns.boxplot(data=df, x=var, ax=axs_cont[i], width=0.1, fliersize=3, whis=1.5, orient="h", color='blue')  # Superimposed thin boxplot
+        # Calculate and annotate skewness and kurtosis
+        skw = skew(df[var].dropna())
+        kurt = kurtosis(df[var].dropna())
+        axs_cont[i].text(0.95, 0, f'Skew: {skw:.2f}\nKurt: {kurt:.2f}', ha='right', va='bottom', transform=axs_cont[i].transAxes)
+        axs_cont[i].set_xlabel("")
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust the layout to fit the title
+
+    # Create figure for discrete variables
+    fig_disc, axs_disc = plt.subplots(nrows=len(discrete_vars), figsize=(10, 5 * len(discrete_vars)))
+    plt.suptitle("Distribution of the Discrete Variables")
+    if len(discrete_vars) == 1:  # Handle case of single subplot
+        axs_disc = [axs_disc]
+    for i, var in enumerate(discrete_vars):
+        sns.countplot(x=df[var], ax=axs_disc[i] if len(discrete_vars) > 1 else axs_disc)
+        axs_disc[i].set_title(f'{var} Count Plot')
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    return fig_cont, fig_disc
 
 
 def plot_pairwise_scatterplots(X: pd.DataFrame,

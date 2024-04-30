@@ -59,6 +59,34 @@ def convert_to_dataframe(data: Union[np.ndarray, pd.DataFrame, pd.Series], prefi
         raise ValueError("Unsupported data type for conversion.")
 
 
+def custom_info(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    """
+    Generates a summary DataFrame containing the number of nans, the type, that number of unique values for each column in the provided DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame for which the summary is to be generated.
+
+    Returns:
+        pd.DataFrame: A new DataFrame with columns for the name of each column in `df`, the data type of each column,
+                      the number of NaN values in each column, and the number of distinct values in each column.
+    """
+    # Creating the summary DataFrame
+    summary_df = pd.DataFrame({
+        "Column Name": df.columns,
+        "Data Type": df.dtypes,
+        "Number of NaNs": df.isna().sum(),
+        "Number of Distinct Values": df.nunique()
+    })
+
+    # Resetting index to make it more readable
+    summary_df.reset_index(drop=True, inplace=True)
+
+    if verbose:
+        print(f"Custom information about the dataframe: \n{summary_df}")
+
+    return summary_df
+
+
 def downcast(df):
     """
     Optimizes a DataFrame's memory usage by downcasting numeric types and converting strings to categories where appropriate.

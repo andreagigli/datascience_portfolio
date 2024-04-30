@@ -4,7 +4,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from src.utils.my_dataframe import downcast
-from src.utils.my_statstest import evaluate_relationship_with_cat
+from src.utils.my_statstest import evaluate_catnum_catcat_relationship
 
 
 def load_data(fpath: str, *args, **kwargs) -> DataFrame:
@@ -26,7 +26,22 @@ def load_data(fpath: str, *args, **kwargs) -> DataFrame:
 
 def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
     """
-    TODO
+    Preprocesses the given DataFrame by performing several data wrangling tasks.
+
+    Detailed Steps:
+        1. Inspect the structure and properties of the DataFrame including shape, head, data types, and summary statistics.
+        2. Drop the 'Id' column as it is typically not useful for modeling.
+        3. Convert the 'Risk' column to a numeric binary column 'Good Risk'.
+        4. Cast specific columns to categorical types.
+        5. Downcast numerical data to more memory-efficient types.
+        6. Impute missing values for 'Saving accounts' and 'Checking account' using their global modes.
+        7. Optionally, explore group-wise imputation for more accuracy.
+
+    Parameters:
+        gcr (pd.DataFrame): The DataFrame to preprocess.
+
+    Returns:
+        pd.DataFrame: The preprocessed DataFrame with modified and imputed data.
     """
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', None)
@@ -66,10 +81,17 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
     print("Convert 'Risk' to a numeric column 'Good Risk' with values 1 - good and 0 - bad.")
     gcr["Risk"] = (gcr["Risk"] == "good").astype('int')
     gcr = gcr.rename(columns={"Risk": "Good Risk"})
+    bool_to_num_converted_cols = ["Good Risk"]
 
     print("Cast specific columns to categorical type")
-    columns_to_convert = ['Sex', 'Housing', 'Saving accounts', 'Checking account', 'Purpose', 'Duration']  # Note that binary columns must be left numerical
-    gcr[columns_to_convert] = gcr[columns_to_convert].astype('category')
+    cat_to_num_converted_columns = ['Sex', 'Housing', 'Saving accounts', 'Checking account', 'Purpose']  # Note that binary columns must be left numerical
+    gcr[cat_to_num_converted_columns] = gcr[cat_to_num_converted_columns].astype('category')
+    print("Replace category values with their numerical codes")
+    # Store the correspondance {catcode: catvalue} for future analyses. TODO: return and store this mapping.
+    catcode_catvalue_mappings = {}
+    for col in cat_to_num_converted_columns:
+        catcode_catvalue_mappings[col] = dict(enumerate(gcr[col].cat.categories))
+        gcr[col] = gcr[col].cat.codes
 
     # Cast data to most adequate types in order to save memory
     print("Downcast data to save memory")
@@ -108,6 +130,19 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
         gcr["Checking account"] = gcr.groupby("Purpose")["Checking account"].transform(lambda x: x.fillna(x.mode()[0]))
     """
 
+    # Print a summary of the preprocessed dataset
+    print("\n" + "=" * 60)
+    print("INTERPRETATION OF THE POSTPROCESSED DATAFRAME 'gcr'")
+    print("=" * 60)
+    for col in gcr.columns:
+        if col in bool_to_num_converted_cols:
+            print(f"- {col} (boolean)")
+        elif col in cat_to_num_converted_columns:
+            mapping_info = ", ".join([f"{code}-{val}" for code, val in catcode_catvalue_mappings[col].items()])
+            print(f"- {col} (catcode numeric): {mapping_info}")
+        else:
+            print(f"- {col} ({gcr[col].dtype})")
+    print("=" * 60 + "\n")
     # endregion
 
     return gcr

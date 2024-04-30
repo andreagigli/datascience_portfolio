@@ -7,8 +7,8 @@ from pandas import DataFrame
 from typing import Optional, Tuple
 
 
-def evaluate_relationship_with_cat(df: DataFrame, target_col: str, verbose: bool = False,
-                                   ) -> Tuple[Optional[DataFrame], Optional[DataFrame]]:
+def evaluate_catnum_catcat_relationship(df: DataFrame, target_col: str, verbose: bool = False,
+                                        ) -> Tuple[Optional[DataFrame], Optional[DataFrame]]:
     """
     Evaluates the relationship between a specified target column (either categorical or numerical) and other
     categorical columns in the dataset that do not have missing values, using Chi-Square and ANOVA tests.
