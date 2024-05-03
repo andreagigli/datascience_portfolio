@@ -78,13 +78,17 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
     print("Discard the Id column")
     gcr = gcr.drop(labels=["Id"], axis=1)
 
+    print("Impute missing values of the columns 'Saving accounts' and 'Checking account' with global their modes.")
+    gcr["Saving accounts"] = gcr["Saving accounts"].fillna(gcr["Saving accounts"].mode()[0])
+    gcr["Checking account"] = gcr["Checking account"].fillna(gcr["Checking account"].mode()[0])
+
     print("Convert 'Risk' to a numeric column 'Good Risk' with values 1 - good and 0 - bad.")
     gcr["Risk"] = (gcr["Risk"] == "good").astype('int')
     gcr = gcr.rename(columns={"Risk": "Good Risk"})
     bool_to_num_converted_cols = ["Good Risk"]
 
     print("Cast specific columns to categorical type")
-    cat_to_num_converted_columns = ['Sex', 'Housing', 'Saving accounts', 'Checking account', 'Purpose']  # Note that binary columns must be left numerical
+    cat_to_num_converted_columns = ['Job', 'Sex', 'Housing', 'Saving accounts', 'Checking account', 'Purpose']  # Note that binary columns must be left numerical
     gcr[cat_to_num_converted_columns] = gcr[cat_to_num_converted_columns].astype('category')
     print("Replace category values with their numerical codes")
     # Store the correspondance {catcode: catvalue} for future analyses. TODO: return and store this mapping.
@@ -96,10 +100,6 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
     # Cast data to most adequate types in order to save memory
     print("Downcast data to save memory")
     gcr = downcast(gcr)
-
-    print("Impute missing values of the columns 'Saving accounts' and 'Checking account' with global their modes.")
-    gcr["Saving accounts"] = gcr["Saving accounts"].fillna(gcr["Saving accounts"].mode()[0])
-    gcr["Checking account"] = gcr["Checking account"].fillna(gcr["Checking account"].mode()[0])
 
     """
     Note: Considering group-wise instead of global missing value imputation could potentially enhance the accuracy.

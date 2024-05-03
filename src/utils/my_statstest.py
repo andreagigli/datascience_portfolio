@@ -1,10 +1,46 @@
 import warnings
 
+import numpy as np
 import pandas as pd
 import pingouin as pg
 
 from pandas import DataFrame
 from typing import Optional, Tuple
+
+from scipy.stats import spearmanr
+from sklearn.base import BaseEstimator, TransformerMixin
+
+
+class SpearmanScorer(BaseEstimator, TransformerMixin):
+    """ Custom scorer for Spearman's rank correlation to use with feature selection modules in scikit-learn. """
+
+    def fit(self, X, y):
+        """ Fit the estimator to the data.
+
+        Args:
+            X (array-like, shape [n_samples, n_features]): The data matrix.
+            y (array-like, shape [n_samples]): The target vector.
+
+        Returns:
+            self: Returns the instance itself.
+        """
+        # Compute Spearman's correlation for each feature
+        self.scores_ = np.array([spearmanr(x, y).correlation for x in X.T])
+        # Handle NaN values in scores
+        self.scores_ = np.nan_to_num(self.scores_, nan=0.0)
+        return self
+
+    def transform(self, X):
+        """ Return the input itself. """
+        return X
+
+    def fit_transform(self, X, y, **kwargs):
+        """ Fit to data, then transform it.
+
+        Args:
+            **kwargs:
+        """
+        return self.fit(X, y).transform(X)
 
 
 def evaluate_catnum_catcat_relationship(df: DataFrame, target_col: str, verbose: bool = False,
@@ -74,3 +110,5 @@ def evaluate_catnum_catcat_relationship(df: DataFrame, target_col: str, verbose:
                 print("No ANOVA Test Results available.")
 
     return chi_square_results_df, anova_results_df
+
+

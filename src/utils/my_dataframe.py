@@ -156,3 +156,21 @@ def downcast(df):
         df = df["value"]
 
     return df
+
+
+def subsample_regular_interval(df: pd.DataFrame, sample_size: int) -> pd.DataFrame:
+    """
+    Subsample a DataFrame by selecting rows at regular intervals based on the desired sample size.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to subsample.
+        sample_size (int): The number of samples to select.
+
+    Returns:
+        pd.DataFrame: A subsampled DataFrame with the specified number of samples.
+    """
+    total_rows = len(df)
+    step = max(1, total_rows // sample_size)  # Calculate step size, ensure it's at least 1
+    subsampled_df = df.iloc[::step]  # Select rows at intervals of the step size
+
+    return subsampled_df.head(sample_size)  # Return exactly `sample_size` elements
