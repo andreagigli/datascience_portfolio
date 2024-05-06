@@ -1,22 +1,19 @@
 from functools import partial
-
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 from typing import Optional, List, Tuple
 
-from matplotlib.colors import LogNorm
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from matplotlib.figure import Figure
 from scipy.stats import skew, kurtosis
 from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, mutual_info_regression, f_regression, f_classif, r_regression, chi2
 from sklearn.manifold import TSNE
-from src.utils.my_dataframe import subsample_regular_interval
-
 from sklearn.preprocessing import StandardScaler
 
-from src.utils.my_statstest import SpearmanScorer
+from src.utils.my_dataframe import subsample_regular_interval
+from src.utils.my_statstest import spearman_score_func
 
 
 def compute_mutual_information(data: pd.DataFrame,
@@ -24,8 +21,9 @@ def compute_mutual_information(data: pd.DataFrame,
                                target: Optional[str] = None,
                                discrete_features_mask: Optional[List[bool]] = None,
                                sample_size: Optional[int] = None,
-                               plot_heatmap: bool = False) -> Tuple[
-    pd.DataFrame, pd.DataFrame, Optional[Figure], Optional[Figure]]:
+                               plot_heatmap: bool = False,
+                               include_diagonal: bool = False,
+                               ) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Figure], Optional[Figure]]:
     """
     Computes mutual information between selected feature columns and one optional target in the dataset.
 
@@ -39,9 +37,10 @@ def compute_mutual_information(data: pd.DataFrame,
         data (pd.DataFrame): The dataframe containing the data.
         columns_of_interest (Optional[List[str]]): Columns of interest for MI calculation. Defaults to all columns if None.
         target (Optional[str]): The target column for MI calculation. If None, calculates MI for features against each other.
-        discrete_features_mask (Optional[List[bool]]): Mask indicating whether each feature in columns_of_interest is discrete.
+        discrete_features_mask (Optional[List[bool]]): Mask indicating whether each feature in columns_of_interest is discrete. If None, assumes all columns are discrete.
         sample_size (Optional[int]): If specified, uses a random subset of this size for calculation. Useful for large datasets.
         plot_heatmap (bool): If True, plots a heatmap of the mutual information results.
+        include_diagonal (bool): If False, excludes the diagonal in heatmap where feature and target are the same. Default is False.
 
     Returns:
         Tuple containing:
@@ -49,6 +48,11 @@ def compute_mutual_information(data: pd.DataFrame,
             - pd.DataFrame: MI scores for features considered as discrete targets.
             - Optional[plt.Figure]: Heatmap for continuous features if generated.
             - Optional[plt.Figure]: Heatmap for discrete features if generated.
+
+    Example uses:
+        Mutual information between all features and a target column, with all columns assumed discrete: compute_mutual_information(data=df, target="target_col", sample_size=1000, plot_heatmap=True, include_diagonal=True)
+        Mutual information between all features and a target column, with only some columns being discrete: compute_mutual_information(data=df, target="target_col", discrete_feature_mask=mask_discrete_cols, sample_size=1000, plot_heatmap=True, include_diagonal=True)
+        Mutual information between all pairs of features, with only some columns being discrete:  compute_mutual_information(data=df, discrete_feature_mask=mask_discrete_cols, sample_size=1000, plot_heatmap=True, include_diagonal=True)
     """
     # Use all columns if none are specifically provided
     if columns_of_interest is None:
@@ -61,7 +65,7 @@ def compute_mutual_information(data: pd.DataFrame,
             columns_of_interest = data.columns.tolist()
 
     # Set up the discrete features mask
-    if discrete_features_mask is None:
+    if discrete_features_mask is None:  # If None, assume all columns discrete
         discrete_features_mask = [False] * len(columns_of_interest)
 
     # Validate the discrete_features_mask size
@@ -84,11 +88,12 @@ def compute_mutual_information(data: pd.DataFrame,
         X = data[columns_of_interest]
         y = data[target]
         if discrete_features_mask[columns_of_interest.index(target)]:  # Discrete target
-            selector = SelectKBest(score_func=score_func_disc, k="all").fit(X, y)  # Use sklearn selector to quickly compute all the pairwise scores between y and all the X
-            results_disc = pd.DataFrame(
-                {'feature_name': selector.feature_names_in_, "target_name": target, "MI": selector.scores_})
+            selector = SelectKBest(score_func=score_func_disc, k="all")  # Use sklearn selector to quickly compute all the pairwise scores between y and all the X
+            selector.fit(X, y)
+            results_disc = pd.DataFrame({'feature_name': selector.feature_names_in_, "target_name": target, "MI": selector.scores_})
         else:  # Continuous target
-            selector = SelectKBest(score_func=score_func_cont, k="all").fit(X, y)
+            selector = SelectKBest(score_func=score_func_cont, k="all")
+            selector.fit(X, y)
             results_cont = pd.DataFrame(
                 {'feature_name': selector.feature_names_in_, "target_name": target, "MI": selector.scores_})
     else:
@@ -97,12 +102,14 @@ def compute_mutual_information(data: pd.DataFrame,
             X = data[columns_of_interest]
             y = data[current_target_col]
             if discrete_features_mask[columns_of_interest.index(current_target_col)]:
-                selector = SelectKBest(score_func=score_func_disc, k="all").fit(X, y)
+                selector = SelectKBest(score_func=score_func_disc, k="all")
+                selector.fit(X, y)
                 results_disc = pd.concat([results_disc, pd.DataFrame(
                     {'feature_name': selector.feature_names_in_, "target_name": current_target_col,
                      "MI": selector.scores_})], ignore_index=True)
             else:  # Continuous current_target_col
-                selector = SelectKBest(score_func=score_func_cont, k="all").fit(X, y)
+                selector = SelectKBest(score_func=score_func_cont, k="all")
+                selector.fit(X, y)
                 results_cont = pd.concat([results_cont, pd.DataFrame(
                     {'feature_name': selector.feature_names_in_, "target_name": current_target_col,
                      "MI": selector.scores_})], ignore_index=True)
@@ -110,21 +117,33 @@ def compute_mutual_information(data: pd.DataFrame,
     # Plotting heatmaps if required
     fig_heatmap_mi_cont, fig_heatmap_mi_disc = None, None
     if plot_heatmap:
+        # Determine the number of plots based on the data availability
+        num_plots = (not results_cont.empty) + (not results_disc.empty)
+        # Create subplots: one row, with plots side by side
+        fig, axes = plt.subplots(1, num_plots, figsize=(10 * num_plots, 5))
+        # Ensure axes is iterable (in case there is only one plot)
+        if num_plots == 1:
+            axes = [axes]
+        current_ax = 0
+
         if not results_cont.empty:
-            fig_heatmap_mi_cont, ax1 = plt.subplots(figsize=(10, 5))
-            tmp_results = results_cont[results_cont['feature_name'] != results_cont['target_name']]  # Do not plot scores pertaining the relationship of a feature with itself because this can mess up the visual scale of the heatmap
+            ax1 = axes[current_ax]
+            ax1.set_title('Mutual Information for Continuous Target')
+            tmp_results = results_cont if include_diagonal else results_cont[results_cont['feature_name'] != results_cont['target_name']]  # Do not plot scores pertaining the relationship of a feature with itself because this can mess up the visual scale of the heatmap
             heatmap_data = tmp_results.pivot(index="feature_name", columns="target_name", values="MI")
             sns.heatmap(heatmap_data, annot=True, cmap='rocket', fmt=".2g", ax=ax1)
-            ax1.set_title('Mutual Information for Continuous Features')
-            plt.show()
+            ax1.set_xticklabels(ax1.get_xticklabels(), rotation=30, horizontalalignment="right")
+            current_ax += 1  # Move to the next subplot
 
         if not results_disc.empty:
-            figheatmap_mi_disc, ax2 = plt.subplots(figsize=(10, 5))
-            tmp_results = results_disc[results_disc['feature_name'] != results_disc['target_name']]  # Do not plot scores pertaining the relationship of a feature with itself because this can mess up the visual scale of the heatmap
+            ax2 = axes[current_ax]
+            ax2.set_title('Mutual Information for Discrete Target')
+            tmp_results = results_disc if include_diagonal else results_disc[results_disc['feature_name'] != results_disc['target_name']]
             heatmap_data = tmp_results.pivot(index="feature_name", columns="target_name", values="MI")
             sns.heatmap(heatmap_data, annot=True, cmap='rocket', fmt=".2g", ax=ax2)
-            ax2.set_title('Mutual Information for Discrete Features')
-            plt.show()
+            ax2.set_xticklabels(ax2.get_xticklabels(), rotation=30, horizontalalignment="right")
+
+        plt.tight_layout()
 
     return results_cont, results_disc, fig_heatmap_mi_cont, fig_heatmap_mi_disc
 
@@ -154,6 +173,11 @@ def compute_relationship(data: pd.DataFrame,
         Tuple[Optional[pd.DataFrame], Optional[plt.Figure]]:
             - DataFrame with calculated scores.
             - Optional Figure object if a heatmap is generated.
+
+    Example uses:
+        Pearson correlation between all pairs of features: compute_relationship(data=df, score_func="pearson", sample_size=1000, plot_heatmap=True, include_diagonal=True)
+        Spearman correlation between all pairs of continuous features and a target column: compute_relationship(data=df, score_func="spearman", columns_of_interest=cols_continuous, target="target_col", sample_size=1000, plot_heatmap=True, include_diagonal=True)
+        Chi2 correlation between all pairs of discrete features: compute_relationship(data=df, score_func="chi2", columns_of_interest=cols_discrete, sample_size=1000, plot_heatmap=True, include_diagonal=True)
     """
     # Use all columns if none are specifically provided
     if columns_of_interest is None:
@@ -183,7 +207,7 @@ def compute_relationship(data: pd.DataFrame,
         'mutual_info_regression': mutual_info_regression,
         'chi2': chi2,
         'pearson': r_regression,
-        'spearman': SpearmanScorer,  # Using an sklearn-compatible custom Spearman scorer
+        'spearman': spearman_score_func,  # Using an sklearn-compatible custom Spearman scorer
     }.get(score_func, None)
     if score_func is None:
         raise ValueError("Scoring function not supported. Choose from 'f_classif', 'f_regression', 'mutual_info_classif', 'mutual_info_regression', 'chi2', 'pearson', 'spearman'.")
@@ -198,7 +222,8 @@ def compute_relationship(data: pd.DataFrame,
         # Compute the relationship between the target and other columns
         X = data[columns_of_interest]
         y = data[target]
-        selector = SelectKBest(score_func, k='all').fit(X, y)  # Use sklearn selector to quickly compute all the pairwise scores between y and all the X
+        selector = SelectKBest(score_func, k='all')  # Use sklearn selector to quickly compute all the pairwise scores between y and all the X
+        selector.fit(X, y)
         results = pd.DataFrame({
             'feature_name': columns_of_interest,
             'target_name': target,
@@ -211,7 +236,8 @@ def compute_relationship(data: pd.DataFrame,
         for column in columns_of_interest:
             X = data[columns_of_interest]
             y = data[column]
-            selector = SelectKBest(score_func, k='all').fit(X, y)
+            selector = SelectKBest(score_func, k='all')
+            selector.fit(X, y)
             results = pd.concat([results, pd.DataFrame({'feature_name': columns_of_interest,
                                                         'target_name': column,
                                                         'score': selector.scores_,
@@ -221,6 +247,7 @@ def compute_relationship(data: pd.DataFrame,
     fig_heatmap_relationship = None
     if plot_heatmap and not results.empty:
         fig, ax = plt.subplots(figsize=(10, 8))
+        plt.title(f'Heatmap of {score_func.__name__}')
         tmp_results = results if include_diagonal else results[results['feature_name'] != results['target_name']]  # Do not plot scores pertaining the relationship of a feature with itself because this can mess up the visual scale of the heatmap
         heatmap_data = tmp_results.pivot(index="feature_name", columns="target_name", values="score")
         if not target:
@@ -229,208 +256,90 @@ def compute_relationship(data: pd.DataFrame,
             sns.heatmap(heatmap_data, mask=mask, annot=True, cmap='rocket', ax=ax, fmt=".2g")
         else:
             sns.heatmap(heatmap_data, annot=True, cmap='rocket', ax=ax, fmt=".2g")
-        plt.title(f'Heatmap of {score_func.__name__} Scores')
         plt.xticks(rotation=30, horizontalalignment="right")
         plt.tight_layout()
 
     return results, fig_heatmap_relationship
 
 
-# def compute_relationship_scores(data: pd.DataFrame,
-#                                 columns_of_interest: Optional[List[str]] = None,
-#                                 target_columns: Optional[List[str]] = None,
-#                                 score_func: str = 'mutual_info_classif',
-#                                 sample_size: Optional[int] = None,
-#                                 plot_heatmap: bool = True,
-#                                 ) -> Tuple[pd.DataFrame, Optional[Figure]]:
-#     """
-#     Computes the relationship scores between specified columns and target columns in a dataframe using different scoring methods.
-#
-#     Args:
-#         data (pd.DataFrame): The dataframe containing the data.
-#         columns_of_interest (Optional[List[str]]): Columns of interest for which to compute the relationship scores.
-#         target_columns (Optional[List[str]]): The target columns against which to compute the scores.
-#         score_func (str): Scoring method to use from ['mutual_info_classif', 'mutual_info_regression', 'f_regression', 'f_classif', 'chi2'].
-#         sample_size (Optional[int]): Number of samples to use; if None, use all data.
-#         plot_heatmap (bool): If True, plots a heatmap of the relationship scores.
-#
-#     Returns:
-#         pd.DataFrame: DataFrame containing the scores between each feature and target column, and p-values where applicable.
-#         Figure (Optional): Heatmap of the computed relationship scores.
-#
-#     Scoring Methods Reference:
-#         - 'mutual_info_classif' and 'mutual_info_regression': Scores range from 0 to 1 where 0 indicates no mutual information and 1 indicates maximum mutual information.
-#         - 'f_regression' and 'f_regression': Provides F-statistic and p-values; higher F-statistic indicates a stronger relationship, typically significant if p-value < 0.05.
-#         - 'chi2': Returns chi-squared stats between each non-negative feature and class; larger values indicate higher dependency.
-#     """
-#     # Validate input columns
-#     feature_cols = data.columns if columns_of_interest is None else [col for col in data.columns if col in columns_of_interest]
-#     target_cols = data.columns if target_columns is None else [col for col in data.columns if col in target_columns]
-#
-#     # Handle numeric requirements for certain scoring methods
-#     if score_func in ['chi2', 'f_regression']:
-#         # Check if all selected columns are numeric and non-negative (for chi2)
-#         if not all(pd.api.types.is_numeric_dtype(data[col]) for col in feature_cols + target_cols):
-#             raise ValueError("All selected columns for chi2 and f_regression must be numeric.")
-#         if score_func == 'chi2' and data[feature_cols].min().min() < 0:
-#             raise ValueError("All selected columns for chi2 must be non-negative.")
-#
-#     # Determine the appropriate score function
-#     score_func = {
-#         'mutual_info_classif': mutual_info_classif,
-#         'mutual_info_regression': mutual_info_regression,
-#         'f_regression': f_regression,
-#         'f_classif': f_classif,
-#         'chi2': chi2
-#     }.get(score_func)
-#     if score_func is None:
-#         raise ValueError("Unsupported scoring method")
-#
-#     # Sample data if necessary
-#     if sample_size and sample_size < len(data):
-#         data = data.sample(n=sample_size, random_state=42)
-#
-#     # Compute scores
-#     results = []
-#     for target in target_cols:
-#         features = [col for col in feature_cols if col != target]
-#         selector = SelectKBest(score_func, k='all')
-#         selector.fit(data[features], data[target])
-#         scores = selector.scores_
-#         pvalues = getattr(selector, 'pvalues_', None)  # Get p-values if they exist
-#         results.extend([
-#             {"feature_name": feat, "target_name": target, "score": score, "p_value": pval if pvalues is not None else None}
-#             for feat, score, pval in zip(features, scores, pvalues if pvalues is not None else [None] * len(scores))
-#         ])
-#     results = pd.DataFrame(results)
-#
-#     # Plot heatmap if requested
-#     fig_heatmap_relationships = None
-#     if plot_heatmap and not results.empty:
-#         heatmap_data = results.pivot(index="feature_name", columns="target_name", values="score")
-#         fig_heatmap_relationships = plt.figure(figsize=(10, len(heatmap_data.index) * 0.5))
-#         sns.heatmap(heatmap_data, annot=True, cmap='rocket', fmt=".2g", linewidths=.5)
-#         plt.title(f"Heatmap of {score_func.__name__}")
-#         plt.tight_layout(rect=[0, 0, 1, 0.95])
-#
-#     return results, fig_heatmap_relationships
-
-
-def plot_correlation_heatmap(X: pd.DataFrame,
-                             Y: Optional[pd.DataFrame] = None,
-                             sample_size: int = 1000,
-                             method: str = 'pearson'
-                             ) -> plt.Figure:
-    """
-    Plot a heatmap of the correlation matrix for dataframe X and, optionally, between X and Y.
-
-    Args:
-        X (pd.DataFrame): The design matrix.
-        Y (Optional[pd.DataFrame]): The target matrix. If provided, includes correlation between X and Y. Default is None.
-        sample_size (int): The number of samples to take from X and (optionally) Y for correlation calculation. Default is 1000.
-        method (str): The method for correlation calculation ('pearson' or 'spearman'). Default is 'pearson'.
-
-    Returns:
-        plt.Figure: A matplotlib figure object containing the correlation heatmap.
-    """
-    # Sample data if the sample size is less than the number of rows
-    sampled_X = X.sample(n=min(sample_size, X.shape[0]), random_state=1)
-    if Y is not None:
-        sampled_Y = Y.sample(n=min(sample_size, Y.shape[0]), random_state=1)
-        sampled_data = pd.concat([sampled_X, sampled_Y], axis=1)
-    else:
-        sampled_data = sampled_X
-
-    # Calculate the correlation matrix
-    corr = sampled_data.corr(method=method)
-
-    # Create a mask for the upper triangle
-    mask = np.triu(np.ones_like(corr, dtype=bool))
-
-    # Set up the matplotlib figure
-    fig, ax = plt.subplots(figsize=(11, 9))
-
-    # Generate a custom diverging colormap
-    cmap = sns.diverging_palette(230, 20, as_cmap=True)
-
-    # Draw the heatmap with the mask and correct aspect ratio
-    sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
-                square=True, linewidths=.5, cbar_kws={"shrink": .5})
-
-    # Title adjustment
-    correlation_type = "Pearson" if method == "pearson" else "Spearman"
-    title = f"{correlation_type} Correlation Heatmap"
-    if Y is not None:
-        title += " including X and Y"
-    plt.suptitle(title)
-
-    return fig
-
-
-def plot_data_distribution(df: pd.DataFrame,
-                           columns_to_plot: Optional[List[str]] = None,
+def plot_data_distribution(data: pd.DataFrame,
+                           columns_of_interest: Optional[List[str]] = None,
+                           discrete_features_mask: Optional[List[bool]] = None,
                            ) -> Tuple[plt.Figure, plt.Figure]:
     """
     Generates a single figure with vertical violin plots for continuous variables, including skewness and kurtosis,
     and another figure with count plots for discrete variables in the DataFrame.
 
     Args:
-        df (pd.DataFrame): The DataFrame containing the data.
-        columns_to_plot (List[str], optional): List of columns to include in the plots. Defaults to all columns.
+        data (pd.DataFrame): The DataFrame containing the data.
+        columns_of_interest (List[str], optional): List of columns to include in the plots. Defaults to all columns.
+        discrete_features_mask (Optional[List[bool]]): Mask indicating whether each feature in columns_of_interest is discrete. If None, assumes all columns are discrete.
 
     Returns:
         Tuple[plt.Figure, plt.Figure]: A tuple containing the handles to the figures for continuous and discrete variables respectively.
     """
-    if columns_to_plot is None:
-        columns_to_plot = df.columns.tolist()
+    # Use all columns if none are specifically provided
+    if columns_of_interest is None:
+        columns_of_interest = data.columns.tolist()
+    else:
+        # Filter columns
+        columns_of_interest = list(columns_of_interest)  # Ensure they are a list
+        columns_of_interest = [col for col in columns_of_interest if col in data.columns]
+        if len(columns_of_interest) == 0:
+            columns_of_interest = data.columns.tolist()
+
+    # Set up the discrete features mask
+    if discrete_features_mask is None:  # If None, assume all columns discrete
+        discrete_features_mask = [False] * len(columns_of_interest)
+
+    # Validate the discrete_features_mask size
+    if len(discrete_features_mask) != len(columns_of_interest):
+        raise ValueError("discrete_features_mask must match the length of columns_of_interest.")
 
     # Determine which columns are continuous and which are discrete
-    continuous_vars = [col for col in columns_to_plot if df[col].nunique() > 10]  # Arbitrary cutoff for example
-    discrete_vars = [col for col in columns_to_plot if df[col].nunique() <= 10]
+    continuous_vars = [col for col in columns_of_interest if col not in discrete_features_mask]
+    discrete_vars = [col for col in columns_of_interest if col in discrete_features_mask]
 
     # Create figure for continuous variables
-    fig_cont, axs_cont = plt.subplots(nrows=len(continuous_vars), figsize=(10, 5 * len(continuous_vars)))
+    fig_continuous, axs_continuous = plt.subplots(nrows=len(continuous_vars), figsize=(10, 5 * len(continuous_vars)))
     plt.suptitle("Distribution of the Continuous Variables")
     if len(discrete_vars) == 1:  # Handle case of single subplot by making it iterable
-        axs_cont = [axs_cont]
+        axs_continuous = [axs_continuous]
     for i, var in enumerate(continuous_vars):
-        axs_cont[i].set_title(f'{var} Distribution')
-        sns.violinplot(data=df, x=var, ax=axs_cont[i], inner=None, orient="h",
-                       color='lightgray')  # Violin plot without inner annotations
-        sns.boxplot(data=df, x=var, ax=axs_cont[i], width=0.1, fliersize=3, whis=1.5, orient="h",
-                    color='blue')  # Superimposed thin boxplot
+        axs_continuous[i].set_title(f'{var} Distribution')
+        sns.violinplot(data=data, x=var, ax=axs_continuous[i], inner=None, orient="h", color='lightgray')  # Violin plot without inner annotations
+        sns.boxplot(data=data, x=var, ax=axs_continuous[i], width=0.1, fliersize=3, whis=1.5, orient="h", color='blue')  # Superimposed thin boxplot
         # Calculate and annotate skewness and kurtosis
-        skw = skew(df[var].dropna())
-        kurt = kurtosis(df[var].dropna())
-        axs_cont[i].text(0.95, 0, f'Skew: {skw:.2f}\nKurt: {kurt:.2f}', ha='right', va='bottom',
-                         transform=axs_cont[i].transAxes)
-        axs_cont[i].set_xlabel("")
-    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust the layout to fit the title
+        skw = skew(data[var].dropna())
+        kurt = kurtosis(data[var].dropna())
+        axs_continuous[i].text(0.95, 0, f'Skew: {skw:.2f}\nKurt: {kurt:.2f}', ha='right', va='bottom', transform=axs_continuous[i].transAxes)
+        axs_continuous[i].set_xlabel("")
+    plt.tight_layout(rect=(0, 0, 1, 0.95))  # Adjust the layout to fit the title
 
     # Create figure for discrete variables
-    fig_disc, axs_disc = plt.subplots(nrows=len(discrete_vars), figsize=(10, 5 * len(discrete_vars)))
+    fig_discrete, axs_discrete = plt.subplots(nrows=len(discrete_vars), figsize=(10, 5 * len(discrete_vars)))
     plt.suptitle("Distribution of the Discrete Variables")
     if len(discrete_vars) == 1:  # Handle case of single subplot
-        axs_disc = [axs_disc]
+        axs_discrete = [axs_discrete]
     for i, var in enumerate(discrete_vars):
-        sns.countplot(x=df[var], ax=axs_disc[i] if len(discrete_vars) > 1 else axs_disc)
-        axs_disc[i].set_title(f'{var} Count Plot')
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+        sns.countplot(x=data[var], ax=axs_discrete[i] if len(discrete_vars) > 1 else axs_discrete)
+        axs_discrete[i].set_title(f'{var} Count Plot')
+    plt.tight_layout(rect=(0, 0, 1, 0.95))
 
-    return fig_cont, fig_disc
+    return fig_continuous, fig_discrete
 
 
-def plot_feature_clusters(df: pd.DataFrame,
-                          columns_to_plot: Optional[List[str]] = None,
-                          color_labels: Optional[pd.Series] = None,
-                          sample_size: int = 100,
-                          ) -> Figure:
+def plot_clusters_2d(data: pd.DataFrame,
+                     columns_to_plot: Optional[List[str]] = None,
+                     color_labels: Optional[pd.Series] = None,
+                     sample_size: int = 100,
+                     ) -> Figure:
     """
     Visualizes the features projected in 2D using PCA and t-SNE for dimensionality reduction on specified columns,
     with optional data subsampling and coloring based on provided labels.
 
     Args:
-        df (pd.DataFrame): DataFrame containing the data.
+        data (pd.DataFrame): DataFrame containing the data.
         columns_to_plot (Optional[List[str]]): List of column names to include in the analysis, typically the continuous numerical ones. Uses all columns if None.
         color_labels (Optional[pd.Series]): Series containing labels for coloring the scatter plot points.
         sample_size (int): The number of samples to take from X and (optionally) Y to plot in each scatterplot. Default is 100.
@@ -439,7 +348,7 @@ def plot_feature_clusters(df: pd.DataFrame,
         matplotlib.figure.Figure: The figure object containing PCA and t-SNE scatter plots.
     """
     # Select columns for analysis
-    data = df if columns_to_plot is None else df[columns_to_plot]
+    data = data if columns_to_plot is None else data[columns_to_plot]
 
     # Sample data if necessary
     if sample_size < len(data):
