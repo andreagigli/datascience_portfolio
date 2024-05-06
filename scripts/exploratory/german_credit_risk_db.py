@@ -45,7 +45,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor, LGBMClassifier
-from scipy.sparse import csr_matrix
 from scipy.stats import loguniform, randint, uniform, rv_continuous, rv_discrete
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
@@ -56,9 +55,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import SVC
 
-import src.data.load_exampledb
 import src.data.data_gcrdb
 import src.data.data_m5salesdb
+import src.data.load_exampledb
 import src.data.split_train_test
 import src.data.split_train_val_test
 import src.eda.eda_gcrdb
@@ -67,15 +66,11 @@ import src.evaluation.evaluate_exampledb
 import src.evaluation.evaluate_gcrdb
 import src.evaluation.evaluate_m5salesdb
 import src.features.features_exampledb
-import src.features.features_gcrdb
 import src.features.features_m5salesdb
 import src.models.custom_linear_regressor
 import src.prediction.predict_m5salesdb
-from src.eda.eda_misc import plot_correlation_heatmap, plot_pairwise_scatterplots
 from src.optimization.custom_sk_validators import PredefinedSplit
-from src.utils.my_dataframe import convert_df_to_sparse_matrix
 from src.utils.my_os import ensure_dir_exists
-
 
 # Dictionaries for mapping identifiers to strings representing sklearn or custom functions
 MODELS: Dict[str, Type[BaseEstimator]] = {
@@ -175,6 +170,7 @@ def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
     if (split_fn == "split_train_test" or split_fn == "split_train_val_test") and split_ratio is None:
         raise ValueError("split_ratio must be provided for splitting functions 'split_train_test' and 'split_train_val_test'.")
 
+    ratios = []
     if split_ratio is not None:
         # Check that split ratio is a string of numbers separated by spaces
         try:
@@ -192,13 +188,13 @@ def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
     # if "sklearn" in model_module:
     #     if split_fn == "split_train_val_test":
     #         raise ValueError("Splitting function 'split_train_val_test' incompatible with sklearn models.")
-    #     if len(ratios) != 2:
+    #     if split_ratio is None or len(ratios) != 2:
     #         raise ValueError("Split ratio for sklearn models must contain exactly two numbers.")
 
     if "tensorflow" in model_module or "torch" in model_module:
         if split_fn == "split_train_test":
             raise ValueError("Splitting function 'split_train_test' incompatible with sklearn models.")
-        if len(ratios) != 3:
+        if split_ratio is None or len(ratios) != 3:
             raise ValueError("Split ratio for TensorFlow/PyTorch models must contain exactly three numbers.")
 
 
@@ -467,7 +463,7 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # Parse split arguments
     if parsed_args.split_ratio is not None:  # Parse the split_ratio if provided
-        split_ratios = [int(item) for item in parsed_args.split_ratio.split()]
+        split_ratios = [float(item) for item in parsed_args.split_ratio.split()]  # Format correctness was already checked
         if len(split_ratios) != 2 and len(split_ratios) != 3:
             raise ValueError("split_ratio must include two or three integers for train-test or train-val-test percentages.")
         aux_split_params["train_prc"] = split_ratios[0]

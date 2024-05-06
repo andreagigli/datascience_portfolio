@@ -1,10 +1,7 @@
-import warnings
-
 import pandas as pd
 from pandas import DataFrame
 
 from src.utils.my_dataframe import downcast
-from src.utils.my_statstest import evaluate_catnum_catcat_relationship
 
 
 def load_data(fpath: str, *args, **kwargs) -> DataFrame:

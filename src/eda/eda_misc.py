@@ -297,8 +297,8 @@ def plot_data_distribution(data: pd.DataFrame,
         raise ValueError("discrete_features_mask must match the length of columns_of_interest.")
 
     # Determine which columns are continuous and which are discrete
-    continuous_vars = [col for col in columns_of_interest if col not in discrete_features_mask]
-    discrete_vars = [col for col in columns_of_interest if col in discrete_features_mask]
+    continuous_vars = [col for col, is_discrete in zip(columns_of_interest, discrete_features_mask) if not is_discrete]
+    discrete_vars = [col for col, is_discrete in zip(columns_of_interest, discrete_features_mask) if is_discrete]
 
     # Create figure for continuous variables
     fig_continuous, axs_continuous = plt.subplots(nrows=len(continuous_vars), figsize=(10, 5 * len(continuous_vars)))
