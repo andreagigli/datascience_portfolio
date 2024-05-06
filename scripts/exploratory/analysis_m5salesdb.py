@@ -504,10 +504,10 @@ def main(parsed_args: argparse.Namespace) -> None:
         Y = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "Y.pkl"))
 
     # Explore relationships within features and between features and targets
-    plot_correlation_heatmap(X, Y, sample_size=1000, method='pearson')
-    plot_correlation_heatmap(X, Y, sample_size=1000, method='spearman')
+    plot_correlation_heatmap(X, Y, sample_size=1000, method='pearson')  # TODO: Change to compute_relationship(data=pd.concat((X, y), axis=1, ignore_index=True), score_func="pearson", sample_size=1000, plot_heatmap=True, include_diagonal=True)
+    plot_correlation_heatmap(X, Y, sample_size=1000, method='spearman')  # TODO: Change to compute_relationship(data=pd.concat((X, y), axis=1, ignore_index=True), score_func="spearman", sample_size=1000, plot_heatmap=True, include_diagonal=True)
     # columns_to_plot = ["sold", "sell_price", "wday", "sold_robustlag_7", "sold_next_day"]
-    # plot_pairwise_scatterplots(X, Y, columns_to_plot=columns_to_plot, sample_size=100)
+    # plot_pairwise_scatterplots(X, Y, columns_to_plot=columns_to_plot, sample_size=100)  # TODO: Change to plot_pairwise_scatterplot(data=pd.concat((X, y), axis=1, ignore_index=True), columns_to_plot=columns_to_plot, sample_size=100)
 
     # Parse split arguments
     if parsed_args.split_ratio is not None:  # Parse the split_ratio if provided
