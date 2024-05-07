@@ -22,8 +22,7 @@ def compute_mutual_information(data: pd.DataFrame,
                                discrete_features_mask: Optional[List[bool]] = None,
                                sample_size: Optional[int] = None,
                                plot_heatmap: bool = False,
-                               include_diagonal: bool = False,
-                               ) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Figure], Optional[Figure]]:
+                               include_diagonal: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Figure], Optional[Figure]]:
     """
     Computes mutual information between selected feature columns and one optional target in the dataset.
 
@@ -214,7 +213,7 @@ def compute_relationship(data: pd.DataFrame,
 
     # Sample the data if necessary
     if sample_size and sample_size < len(data):
-        data = data.sample(n=sample_size, random_state=42)
+        data = subsample_regular_interval(df=data, sample_size=sample_size)
 
     results = pd.DataFrame()
 
@@ -262,10 +261,67 @@ def compute_relationship(data: pd.DataFrame,
     return results, fig_heatmap_relationship
 
 
+def plot_clusters_2d(data: pd.DataFrame,
+                     columns_to_plot: Optional[List[str]] = None,
+                     color_labels: Optional[pd.Series] = None,
+                     sample_size: int = 100) -> Figure:
+    """
+    Visualizes the features projected in 2D using PCA and t-SNE for dimensionality reduction on specified columns,
+    with optional data subsampling and coloring based on provided labels.
+
+    Args:
+        data (pd.DataFrame): DataFrame containing the data.
+        columns_to_plot (Optional[List[str]]): List of column names to include in the analysis, typically the continuous numerical ones. Uses all columns if None.
+        color_labels (Optional[pd.Series]): Series containing labels for coloring the scatter plot points.
+        sample_size (int): The number of samples to take from X and (optionally) Y to plot in each scatterplot. Default is 100.
+
+    Returns:
+        matplotlib.figure.Figure: The figure object containing PCA and t-SNE scatter plots.
+    """
+    # Select columns for analysis
+    data = data if columns_to_plot is None else data[columns_to_plot]
+
+    # Sample data if necessary
+    if sample_size < len(data):
+        data = subsample_regular_interval(df=data, sample_size=sample_size)
+        color_labels = subsample_regular_interval(df=color_labels, sample_size=sample_size)
+
+    # Normalize the data
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(data)
+
+    # PCA Analysis
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+    explained_variance = np.cumsum(pca.explained_variance_ratio_)[:2]
+
+    # t-SNE Analysis
+    tsne = TSNE(n_components=2, random_state=0)
+    X_tsne = tsne.fit_transform(X_scaled)
+
+    # Create plots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    # PCA Plot
+    ax1.set_title(
+        f'PCA - Top 2 Components ({explained_variance[0]:.2f}, {explained_variance[1]:.2f} Explained Variance)')
+    ax1.scatter(X_pca[:, 0], X_pca[:, 1], alpha=0.7, c=color_labels)
+    ax1.set_xlabel('Component 1')
+    ax1.set_ylabel('Component 2')
+    ax1.grid(True)
+    # t-SNE Plot
+    ax2.set_title('t-SNE')
+    ax2.scatter(X_tsne[:, 0], X_tsne[:, 1], alpha=0.7, c=color_labels)
+    ax2.set_xlabel('Dimension 1')
+    ax2.set_ylabel('Dimension 2')
+    ax2.grid(True)
+    plt.tight_layout()
+
+    return fig
+
+
 def plot_data_distribution(data: pd.DataFrame,
                            columns_of_interest: Optional[List[str]] = None,
-                           discrete_features_mask: Optional[List[bool]] = None,
-                           ) -> Tuple[plt.Figure, plt.Figure]:
+                           discrete_features_mask: Optional[List[bool]] = None,) -> Tuple[plt.Figure, plt.Figure]:
     """
     Generates a single figure with vertical violin plots for continuous variables, including skewness and kurtosis,
     and another figure with count plots for discrete variables in the DataFrame.
@@ -329,60 +385,54 @@ def plot_data_distribution(data: pd.DataFrame,
     return fig_continuous, fig_discrete
 
 
-def plot_clusters_2d(data: pd.DataFrame,
-                     columns_to_plot: Optional[List[str]] = None,
-                     color_labels: Optional[pd.Series] = None,
-                     sample_size: int = 100,
-                     ) -> Figure:
+def plot_grouped_violinplots(data: pd.DataFrame,
+                             target_column: str,
+                             columns_of_interest: Optional[List[str]] = None,
+                             sample_size: int = None):
     """
-    Visualizes the features projected in 2D using PCA and t-SNE for dimensionality reduction on specified columns,
-    with optional data subsampling and coloring based on provided labels.
+    Plots grouped violin plots for specified continuous columns of a DataFrame against a categorical target column.
+
+    This visualization helps in understanding the distribution of continuous variables across different categories
+    of the target variable, which can be particularly useful for exploring potential influences or biases in features
+    relative to the target.
 
     Args:
-        data (pd.DataFrame): DataFrame containing the data.
-        columns_to_plot (Optional[List[str]]): List of column names to include in the analysis, typically the continuous numerical ones. Uses all columns if None.
-        color_labels (Optional[pd.Series]): Series containing labels for coloring the scatter plot points.
-        sample_size (int): The number of samples to take from X and (optionally) Y to plot in each scatterplot. Default is 100.
+        data (pd.DataFrame): The DataFrame containing the data.
+        target_column (str): The name of the target column against which the distributions will be plotted.
+        columns_of_interest (list, optional): List of column names from the DataFrame to include in the violin plots. If None, defaults to all columns.
+        sample_size (int, optional): If specified, a random sample of this size will be taken from the DataFrame.
+            Useful for large datasets to reduce processing time and clutter in the plots.
 
     Returns:
-        matplotlib.figure.Figure: The figure object containing PCA and t-SNE scatter plots.
+        plt.Figure: A matplotlib figure object containing the grouped violin plots.
     """
-    # Select columns for analysis
-    data = data if columns_to_plot is None else data[columns_to_plot]
+    # Use all columns if none are given
+    if columns_of_interest is None:
+        columns_of_interest = data.columns.tolist()
+    else:
+        # Filter columns
+        columns_of_interest = list(columns_of_interest)  # Ensure they are a list
+        columns_of_interest = [col for col in columns_of_interest if col in data.columns]
+        if len(columns_of_interest) == 0:
+            columns_of_interest = data.columns.tolist()
 
-    # Sample data if necessary
-    if sample_size < len(data):
+    if target_column not in data.columns:
+        raise ValueError("Argument target_column must be a valid column of data.")
+
+    if sample_size is not None and sample_size < len(data):
         data = subsample_regular_interval(df=data, sample_size=sample_size)
-        color_labels = subsample_regular_interval(df=color_labels, sample_size=sample_size)
 
-    # Normalize the data
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(data)
-
-    # PCA Analysis
-    pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X_scaled)
-    explained_variance = np.cumsum(pca.explained_variance_ratio_)[:2]
-
-    # t-SNE Analysis
-    tsne = TSNE(n_components=2, random_state=0)
-    X_tsne = tsne.fit_transform(X_scaled)
-
-    # Create plots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-    # PCA Plot
-    ax1.set_title(
-        f'PCA - Top 2 Components ({explained_variance[0]:.2f}, {explained_variance[1]:.2f} Explained Variance)')
-    ax1.scatter(X_pca[:, 0], X_pca[:, 1], alpha=0.7, c=color_labels)
-    ax1.set_xlabel('Component 1')
-    ax1.set_ylabel('Component 2')
-    ax1.grid(True)
-    # t-SNE Plot
-    ax2.set_title('t-SNE')
-    ax2.scatter(X_tsne[:, 0], X_tsne[:, 1], alpha=0.7, c=color_labels)
-    ax2.set_xlabel('Dimension 1')
-    ax2.set_ylabel('Dimension 2')
-    ax2.grid(True)
+    num_plots = len(columns_of_interest)
+    fig, axes = plt.subplots(nrows=num_plots, figsize=(8, 4 * num_plots))
+    if num_plots == 1:
+        axes = [axes]  # Ensure axes is iterable for a single subplot case
+    for ax, feature in zip(axes, columns_of_interest):
+        ax.set_title(f'Distribution of {feature}')
+        sns.violinplot(x=feature, y=target_column, data=data, ax=ax, orient='h', hue=target_column, split=True)
+        ax.invert_yaxis()  # This inverts the y-axis so that the value increases upwards
+        ax.yaxis.set_ticks([])
+        ax.set_xlabel('Values')
+        ax.set_ylabel('')
     plt.tight_layout()
 
     return fig
