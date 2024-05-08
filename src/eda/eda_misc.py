@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,12 +8,72 @@ import seaborn as sns
 from matplotlib.figure import Figure
 from scipy.stats import skew, kurtosis
 from sklearn.decomposition import PCA
+from sklearn.ensemble import IsolationForest
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, mutual_info_regression, f_regression, f_classif, r_regression, chi2
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
 from src.utils.my_dataframe import subsample_regular_interval
 from src.utils.my_statstest import spearman_score_func
+
+
+COLORMAPS = {
+    'sequential': 'viridis',
+    'diverging': 'coolwarm',
+    'categorical': 'colorblind'
+}
+
+
+def check_outliers(data: pd.DataFrame,
+                   columns_of_interest: List[str],
+                   sample_size: Optional[int] = None,
+                   profile_plots: bool = True) -> Tuple[pd.Series, Optional[Figure], Optional[Figure]]:
+    """
+    Detects and profiles outliers in the specified continuous columns using Isolation Forest.
+
+    Args:
+        data (pd.DataFrame): The DataFrame containing the data.
+        columns_of_interest (List[str]): List of column names to analyze for outliers, usually all the continuous columns.
+        sample_size (Optional[int]): If specified, selects sample_size samples evenly spaced within the dataset.
+        profile_plots (bool): If True, generates violin plots for profiling outliers.
+
+    Returns:
+        pd.Series: Series indicating outliers (1 for outlier, 0 for non-outlier).
+        Two figures (optional): Figure handles for the visualization of outliers in 2d projctions and in violinplots.
+    """
+    # Sample data if necessary
+    if sample_size and sample_size < len(data):
+        data = subsample_regular_interval(df=data, sample_size=sample_size)
+
+    print("\n### Outliers in the continuous features ###\n")
+    print("Detecting outliers with Random Isolation Forest:")
+    rif = IsolationForest(n_estimators=100, random_state=0).fit(data[columns_of_interest])
+    outliers = rif.predict(data[columns_of_interest]) == -1
+    outliers = pd.Series(outliers.astype(int), name='Outlier', index=data.index)
+    print(f"Number of identified outliers: {outliers.sum()}\n")
+
+    print("Outliers profiling: are these actual outliers or valid extreme data points?")
+    # Create temporary dataframe for outlier profiling
+    data_tmp = data[columns_of_interest].copy()
+    data_tmp["Outlier"] = outliers.values
+    data_tmp["Sample colors"] = data["Good Risk"].values
+    data_tmp.loc[outliers == 1, "Sample colors"] = data["Good Risk"].max() + 1
+
+    print("Descriptive statistics of outlies:")
+    print(data.loc[outliers == 1, columns_of_interest].describe())
+    print("Descriptive statistics of non-outlies:")
+    print(data.loc[outliers == 0, columns_of_interest].describe())
+
+    fig_outliers_clusters = None
+    fig_outliers_violins = None
+    if profile_plots:
+        print("Visualize outliers in a 2D projection of the continuous features.")
+        fig_outliers_clusters = plot_clusters_2d(data_tmp, columns_to_plot=columns_of_interest, color_labels=data_tmp["Sample colors"])
+
+        print("Visualize distribution of outliers vs non-outliers.")
+        fig_outliers_violins = plot_grouped_violinplots(data_tmp, target_column="Outlier", columns_of_interest=columns_of_interest, overlay_stripplot=True)
+
+    return outliers, fig_outliers_clusters, fig_outliers_violins
 
 
 def compute_mutual_information(data: pd.DataFrame,
@@ -37,7 +97,7 @@ def compute_mutual_information(data: pd.DataFrame,
         columns_of_interest (Optional[List[str]]): Columns of interest for MI calculation. Defaults to all columns if None.
         target (Optional[str]): The target column for MI calculation. If None, calculates MI for features against each other.
         discrete_features_mask (Optional[List[bool]]): Mask indicating whether each feature in columns_of_interest is discrete. If None, assumes all columns are discrete.
-        sample_size (Optional[int]): If specified, uses a random subset of this size for calculation. Useful for large datasets.
+        sample_size (Optional[int]): If specified, selects sample_size samples evenly spaced within the dataset.
         plot_heatmap (bool): If True, plots a heatmap of the mutual information results.
         include_diagonal (bool): If False, excludes the diagonal in heatmap where feature and target are the same. Default is False.
 
@@ -130,7 +190,7 @@ def compute_mutual_information(data: pd.DataFrame,
             ax1.set_title('Mutual Information for Continuous Target')
             tmp_results = results_cont if include_diagonal else results_cont[results_cont['feature_name'] != results_cont['target_name']]  # Do not plot scores pertaining the relationship of a feature with itself because this can mess up the visual scale of the heatmap
             heatmap_data = tmp_results.pivot(index="feature_name", columns="target_name", values="MI")
-            sns.heatmap(heatmap_data, annot=True, cmap='rocket', fmt=".2g", ax=ax1)
+            sns.heatmap(heatmap_data, annot=True, cmap=COLORMAPS["sequential"], fmt=".2g", ax=ax1)
             ax1.set_xticklabels(ax1.get_xticklabels(), rotation=30, horizontalalignment="right")
             current_ax += 1  # Move to the next subplot
 
@@ -139,7 +199,7 @@ def compute_mutual_information(data: pd.DataFrame,
             ax2.set_title('Mutual Information for Discrete Target')
             tmp_results = results_disc if include_diagonal else results_disc[results_disc['feature_name'] != results_disc['target_name']]
             heatmap_data = tmp_results.pivot(index="feature_name", columns="target_name", values="MI")
-            sns.heatmap(heatmap_data, annot=True, cmap='rocket', fmt=".2g", ax=ax2)
+            sns.heatmap(heatmap_data, annot=True, cmap=COLORMAPS["sequential"], fmt=".2g", ax=ax2)
             ax2.set_xticklabels(ax2.get_xticklabels(), rotation=30, horizontalalignment="right")
 
         plt.tight_layout()
@@ -164,7 +224,7 @@ def compute_relationship(data: pd.DataFrame,
         score_func (str): An identifier of the scoring function to use, from [f_classif, f_regression, mutual_info_classif, mutual_info_regression, chi2, pearson, spearman].
         columns_of_interest (Optional[List[str]]): Columns of interest for the calculation. Defaults to all columns if None.
         target (Optional[str]): The target column for calculation. If None, calculates for features against each other.
-        sample_size (Optional[int]): If specified, uses a random subset of this size for calculation. Useful for large datasets.
+        sample_size (Optional[int]): If specified, selects sample_size samples evenly spaced within the dataset.
         plot_heatmap (bool): If True, plots a heatmap of the results.
         include_diagonal (bool): If False, excludes the diagonal in heatmap where feature and target are the same. Default is False.
 
@@ -252,9 +312,9 @@ def compute_relationship(data: pd.DataFrame,
         if not target:
             # Only plot lower triangle if no target is provided
             mask = np.triu(np.ones_like(heatmap_data, dtype=bool), k=+1)
-            sns.heatmap(heatmap_data, mask=mask, annot=True, cmap='rocket', ax=ax, fmt=".2g")
+            sns.heatmap(heatmap_data, mask=mask, annot=True, cmap=COLORMAPS["sequential"], ax=ax, fmt=".2g")
         else:
-            sns.heatmap(heatmap_data, annot=True, cmap='rocket', ax=ax, fmt=".2g")
+            sns.heatmap(heatmap_data, annot=True, cmap=COLORMAPS["sequential"], ax=ax, fmt=".2g")
         plt.xticks(rotation=30, horizontalalignment="right")
         plt.tight_layout()
 
@@ -385,10 +445,70 @@ def plot_data_distribution(data: pd.DataFrame,
     return fig_continuous, fig_discrete
 
 
+def plot_grouped_stripplots(data: pd.DataFrame,
+                            target_column: str,
+                            columns_of_interest: Optional[List[str]] = None,
+                            sample_size: int = None,
+                            jitter: Optional[Union[float, bool]] = True):
+    """
+    Plots grouped stripplots for specified categorical columns of a DataFrame against a categorical target column.
+
+    This visualization helps in understanding the distribution of categorical variables across different categories
+    of the target variable. It can be thought of as an equivalent to a grouped violinplot for discrete-discrete
+    relationships (as opposed to continuous-discrete relationships).
+
+    Args:
+        data (pd.DataFrame): The DataFrame containing the data.
+        target_column (str): The name of the target column against which the distributions will be plotted.
+        columns_of_interest (list, optional): List of column names from the DataFrame to include in the plots. If None, defaults to all columns.
+        sample_size (int, optional): If specified, selects sample_size samples evenly spaced within the dataset.
+        jitter (float or bool, optional): Allows to customize the jitter of the stripplot. If not provided, uses a default amount.
+
+    Returns:
+        plt.Figure: A matplotlib figure object containing the grouped plots.
+    """
+    # Use all columns if none are given
+    if columns_of_interest is None:
+        columns_of_interest = data.columns.tolist()
+    else:
+        # Filter columns
+        columns_of_interest = list(columns_of_interest)  # Ensure they are a list
+        columns_of_interest = [col for col in columns_of_interest if col in data.columns]
+        if len(columns_of_interest) == 0:
+            columns_of_interest = data.columns.tolist()
+
+    if target_column not in data.columns:
+        raise ValueError("Argument target_column must be a valid column of data.")
+
+    if sample_size is not None and sample_size < len(data):
+        data = subsample_regular_interval(df=data, sample_size=sample_size)
+
+    num_plots = len(columns_of_interest)
+    fig, axes = plt.subplots(ncols=num_plots, figsize=(4 * num_plots, 8))  # Adjust figure size as needed
+    if num_plots == 1:
+        axes = [axes]  # Ensure axes is iterable for a single subplot case
+    for ax, feature in zip(axes, columns_of_interest):
+        sns.stripplot(data=data, y=feature, hue=target_column, ax=ax, dodge=True, jitter=jitter, alpha=0.6, palette=COLORMAPS["categorical"])
+        ax.set_title(f'Distribution of {feature}')
+        ax.set_xlabel('')
+        ax.set_ylabel('Values')
+        ax.xaxis.set_ticks([])  # Optionally remove x-axis ticks for cleanliness if needed
+        # Adjust the legend
+        ylim = ax.get_ylim()
+        ax.set_ylim(ylim[0], ylim[1] * 1.1)
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles=handles, labels=labels, loc='upper right', bbox_to_anchor=(1, 1), title=target_column)
+
+    plt.tight_layout()
+
+    return fig
+
+
 def plot_grouped_violinplots(data: pd.DataFrame,
                              target_column: str,
                              columns_of_interest: Optional[List[str]] = None,
-                             sample_size: int = None):
+                             sample_size: int = None,
+                             overlay_stripplot: bool = False):
     """
     Plots grouped violin plots for specified continuous columns of a DataFrame against a categorical target column.
 
@@ -400,8 +520,8 @@ def plot_grouped_violinplots(data: pd.DataFrame,
         data (pd.DataFrame): The DataFrame containing the data.
         target_column (str): The name of the target column against which the distributions will be plotted.
         columns_of_interest (list, optional): List of column names from the DataFrame to include in the violin plots. If None, defaults to all columns.
-        sample_size (int, optional): If specified, a random sample of this size will be taken from the DataFrame.
-            Useful for large datasets to reduce processing time and clutter in the plots.
+        sample_size (int, optional): If specified, selects sample_size samples evenly spaced within the dataset.
+        overlay_stripplot (bool, optional): If True, overlays strip plots on the violin plots.
 
     Returns:
         plt.Figure: A matplotlib figure object containing the grouped violin plots.
@@ -423,27 +543,76 @@ def plot_grouped_violinplots(data: pd.DataFrame,
         data = subsample_regular_interval(df=data, sample_size=sample_size)
 
     num_plots = len(columns_of_interest)
-    fig, axes = plt.subplots(nrows=num_plots, figsize=(8, 4 * num_plots))
+    fig, axes = plt.subplots(ncols=num_plots, figsize=(4 * num_plots, 8))  # Adjust figure size as needed
     if num_plots == 1:
         axes = [axes]  # Ensure axes is iterable for a single subplot case
     for ax, feature in zip(axes, columns_of_interest):
+        sns.violinplot(data=data, x=target_column, y=feature, hue=target_column, ax=ax, orient='v', split=True, palette=COLORMAPS["categorical"])
+
+        if overlay_stripplot:
+            sns.stripplot(data=data, x=target_column, y=feature, hue=target_column, dodge=False, jitter=True, palette="dark:black", ax=ax, alpha=0.6)
+            # Remove the second legend created by stripplot
+            handles, labels = ax.get_legend_handles_labels()
+            ax.legend(handles[:len(labels) // 2], labels[:len(labels) // 2])
+
         ax.set_title(f'Distribution of {feature}')
-        sns.violinplot(x=feature, y=target_column, data=data, ax=ax, orient='h', hue=target_column, split=True)
-        ax.invert_yaxis()  # This inverts the y-axis so that the value increases upwards
-        ax.yaxis.set_ticks([])
-        ax.set_xlabel('Values')
-        ax.set_ylabel('')
+        ax.set_xlabel('')
+        ax.set_ylabel('Values')
+        ax.xaxis.set_ticks([])  # Optionally remove x-axis ticks for cleanliness if needed
+
     plt.tight_layout()
 
     return fig
 
 
-def plot_pairwise_scatterplots(data: pd.DataFrame,
-                               columns_to_plot: Optional[List[str]] = None,
-                               target_columns: Optional[List[str]] = None,
-                               color_labels: Optional[pd.Series] = None,
-                               color_interpretation: Optional[str] = None,
-                               sample_size: int = 100) -> plt.Figure:
+def plot_jittered_scatterplot(data: pd.DataFrame,
+                              x: str,
+                              y: str,
+                              hue: Optional[str] = None,
+                              jitter: Union[float, bool] = True,
+                              alpha: float = 0.5,
+                              sample_size: int = None):
+    """
+    Plots a jittered scatterplot between two categorical columns with an optional hue from a third categorical column.
+
+    Args:
+        data (pd.DataFrame): The DataFrame containing the data.
+        x (str): The name of the column for the x-axis.
+        y (str): The name of the column for the y-axis.
+        hue (str, optional): The name of the column for hue. If None, no hue is used.
+        jitter (float or bool, optional): Amount of jitter (only along the categorical axis) to apply. If True, uses a default amount.
+        alpha (float, optional): The transparency level of the points. Default is 0.5.
+        sample_size (int, optional): If specified, selects sample_size samples evenly spaced within the dataset.
+
+    Returns:
+        plt.Figure: A matplotlib figure object containing the scatterplot.
+    """
+    if sample_size is not None and sample_size < len(data):
+        data = subsample_regular_interval(df=data, sample_size=sample_size)
+
+    plt.figure(figsize=(10, 6))
+    sns.stripplot(data=data, x=x, y=y, hue=hue, jitter=jitter, alpha=alpha, dodge=True, palette=COLORMAPS["categorical"])
+
+    if hue:
+        ylim = plt.gca().get_ylim()
+        plt.gca().set_ylim(ylim[0], ylim[1] * 1.1)
+        handles, labels = plt.gca().get_legend_handles_labels()
+        plt.legend(handles=handles, labels=labels, loc='upper right', bbox_to_anchor=(1, 1), title=hue)
+
+    plt.title(f'Jittered Scatterplot of {y} vs {x}')
+    plt.xlabel(x)
+    plt.ylabel(y)
+    plt.tight_layout()
+
+    return plt.gcf()
+
+
+def plot_pairplots(data: pd.DataFrame,
+                   columns_to_plot: Optional[List[str]] = None,
+                   target_columns: Optional[List[str]] = None,
+                   color_labels: Optional[pd.Series] = None,
+                   color_interpretation: Optional[str] = None,
+                   sample_size: int = 100) -> plt.Figure:
     """
     Plot pairwise scatter plots for the dataframe `data`, optionally focusing on interactions between specified
     target columns and the rest of the selected data columns.
@@ -457,7 +626,7 @@ def plot_pairwise_scatterplots(data: pd.DataFrame,
                                               Target columns not in `columns_to_plot` are ignored.
         color_labels (Optional[pd.Series]): Series containing labels for coloring the scatter plot points.
         color_interpretation (Optional[str]): Name of the variable rendered by the color.
-        sample_size (int): The number of samples to take from `data` to plot in each scatterplot. Default is 100.
+        sample_size (int): If specified, selects sample_size samples evenly spaced within the dataset.
 
     Returns:
         plt.Figure: A matplotlib figure object containing the pairwise scatterplots.
@@ -512,6 +681,7 @@ def plot_pairwise_scatterplots(data: pd.DataFrame,
     if color_labels is not None:
         pairplot_kwargs["data"]["Color"] = color_labels  # Add column to data
         pairplot_kwargs["hue"] = "Color"
+        pairplot_kwargs["palette"] = COLORMAPS['categorical']  # Set the colormap for hue
 
     # Generate pairwise scatter plots
     fig_pairplot = sns.pairplot(**pairplot_kwargs, plot_kws={'alpha': 0.5})
