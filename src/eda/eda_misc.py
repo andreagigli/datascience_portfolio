@@ -27,7 +27,8 @@ COLORMAPS = {
 def check_outliers(data: pd.DataFrame,
                    columns_of_interest: List[str],
                    sample_size: Optional[int] = None,
-                   profile_plots: bool = True) -> Tuple[pd.Series, Optional[Figure], Optional[Figure]]:
+                   profile_plots: bool = True,
+                   color_labels: Optional[pd.Series] = None) -> Tuple[pd.Series, Optional[Figure], Optional[Figure]]:
     """
     Detects and profiles outliers in the specified continuous columns using Isolation Forest.
 
@@ -36,6 +37,7 @@ def check_outliers(data: pd.DataFrame,
         columns_of_interest (List[str]): List of column names to analyze for outliers, usually all the continuous columns.
         sample_size (Optional[int]): If specified, selects sample_size samples evenly spaced within the dataset.
         profile_plots (bool): If True, generates violin plots for profiling outliers.
+        color_labels (Optional[pd.Series]): Series containing labels for coloring the scatter plot points.
 
     Returns:
         pd.Series: Series indicating outliers (1 for outlier, 0 for non-outlier).
@@ -44,6 +46,9 @@ def check_outliers(data: pd.DataFrame,
     # Sample data if necessary
     if sample_size and sample_size < len(data):
         data = subsample_regular_interval(df=data, sample_size=sample_size)
+
+    if color_labels is not None and len(color_labels) != len(data):
+        raise ValueError("The pd.Series color_labels must match the data length.")
 
     print("\n### Outliers in the continuous features ###\n")
     print("Detecting outliers with Random Isolation Forest:")
@@ -56,8 +61,11 @@ def check_outliers(data: pd.DataFrame,
     # Create temporary dataframe for outlier profiling
     data_tmp = data[columns_of_interest].copy()
     data_tmp["Outlier"] = outliers.values
-    data_tmp["Sample colors"] = data["Good Risk"].values
-    data_tmp.loc[outliers == 1, "Sample colors"] = data["Good Risk"].max() + 1
+    if color_labels is not None:
+        data_tmp["Sample colors"] = color_labels.values
+    else:
+        data_tmp["Sample colors"] = 0
+    data_tmp.loc[outliers == 1, "Sample colors"] = data_tmp["Sample colors"].max() + 1
 
     print("Descriptive statistics of outlies:")
     print(data.loc[outliers == 1, columns_of_interest].describe())
