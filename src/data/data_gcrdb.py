@@ -1,21 +1,23 @@
+import os
+
 import pandas as pd
 from pandas import DataFrame
 
 from src.utils.my_dataframe import downcast
 
 
-def load_data(fpath: str, *args, **kwargs) -> DataFrame:
+def load_data(dpath: str, *args, **kwargs) -> DataFrame:
     """
     Loads data from a specified CSV file into DataFrames for features and target variables.
 
     Args:
-        fpath (str): The file path to the CSV file containing the dataset.
+        dpath (str): The file path to the directory containing the dataset.
         *args and **kwargs: Only included for compatibility with other load_data functions. Will be ignored.
 
     Returns:
         TODO
     """
-    gcr = pd.read_csv(fpath)
+    gcr = pd.read_csv(os.path.join(dpath, "gcrdb.csv"))
     gcr = gcr.rename(columns={"Unnamed: 0": "Id"})
 
     return gcr
@@ -28,7 +30,7 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
     Detailed Steps:
         1. Inspect the structure and properties of the DataFrame including shape, head, data types, and summary statistics.
         2. Drop the 'Id' column as it is typically not useful for modeling.
-        3. Convert the 'Risk' column to a numeric binary column 'Good Risk'.
+        3. Convert the 'Risk' column to a numeric binary column 'Good risk'.
         4. Cast specific columns to categorical types.
         5. Downcast numerical data to more memory-efficient types.
         6. Impute missing values for 'Saving accounts' and 'Checking account' using their global modes.
@@ -79,10 +81,10 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
     gcr["Saving accounts"] = gcr["Saving accounts"].fillna(gcr["Saving accounts"].mode()[0])
     gcr["Checking account"] = gcr["Checking account"].fillna(gcr["Checking account"].mode()[0])
 
-    print("Convert 'Risk' to a numeric column 'Good Risk' with values 1 - good and 0 - bad.")
+    print("Convert 'Risk' to a numeric column 'Good risk' with values 1 - good and 0 - bad.")
     gcr["Risk"] = (gcr["Risk"] == "good").astype('int')
-    gcr = gcr.rename(columns={"Risk": "Good Risk"})
-    bool_to_num_converted_cols = ["Good Risk"]
+    gcr = gcr.rename(columns={"Risk": "Good risk"})
+    bool_to_num_converted_cols = ["Good risk"]
 
     print("Cast specific columns to categorical type")
     cat_to_num_converted_columns = ['Job', 'Sex', 'Housing', 'Saving accounts', 'Checking account', 'Purpose']  # Note that binary columns must be left numerical
