@@ -18,7 +18,10 @@ def load_data(dpath: str, *args, **kwargs) -> DataFrame:
         TODO
     """
     gcr = pd.read_csv(os.path.join(dpath, "gcrdb.csv"))
-    gcr = gcr.rename(columns={"Unnamed: 0": "Id"})
+    gcr = gcr.rename(columns={"Unnamed: 0": "id"})
+
+    # Standardize column names so that they contain only lower case letters and no spaces.
+    gcr.columns = gcr.columns.str.replace(' ', '_').str.lower()
 
     return gcr
 
@@ -29,11 +32,11 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
 
     Detailed Steps:
         1. Inspect the structure and properties of the DataFrame including shape, head, data types, and summary statistics.
-        2. Drop the 'Id' column as it is typically not useful for modeling.
-        3. Convert the 'Risk' column to a numeric binary column 'Good risk'.
+        2. Drop the 'id' column as it is typically not useful for modeling.
+        3. Convert the 'risk' column to a numeric binary column 'good_risk'.
         4. Cast specific columns to categorical types.
         5. Downcast numerical data to more memory-efficient types.
-        6. Impute missing values for 'Saving accounts' and 'Checking account' using their global modes.
+        6. Impute missing values for 'saving_accounts' and 'checking_account' using their global modes.
         7. Optionally, explore group-wise imputation for more accuracy.
 
     Parameters:
@@ -74,20 +77,20 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
 
     print("\n\nPreprocess dataframe")
 
-    print("Discard the Id column")
-    gcr = gcr.drop(labels=["Id"], axis=1)
+    print("Discard the id column")
+    gcr = gcr.drop(labels=["id"], axis=1)
 
-    print("Impute missing values of the columns 'Saving accounts' and 'Checking account' with global their modes.")
-    gcr["Saving accounts"] = gcr["Saving accounts"].fillna(gcr["Saving accounts"].mode()[0])
-    gcr["Checking account"] = gcr["Checking account"].fillna(gcr["Checking account"].mode()[0])
+    print("Impute missing values of the columns 'saving_accounts' and 'checking_account' with global their modes.")
+    gcr["saving_accounts"] = gcr["saving_accounts"].fillna(gcr["saving_accounts"].mode()[0])
+    gcr["checking_account"] = gcr["checking_account"].fillna(gcr["checking_account"].mode()[0])
 
-    print("Convert 'Risk' to a numeric column 'Good risk' with values 1 - good and 0 - bad.")
-    gcr["Risk"] = (gcr["Risk"] == "good").astype('int')
-    gcr = gcr.rename(columns={"Risk": "Good risk"})
-    bool_to_num_converted_cols = ["Good risk"]
+    print("Convert 'risk' to a numeric column 'good_risk' with values 1 - good and 0 - bad.")
+    gcr["risk"] = (gcr["risk"] == "good").astype('int')
+    gcr = gcr.rename(columns={"risk": "good_risk"})
+    bool_to_num_converted_cols = ["good_risk"]
 
     print("Cast specific columns to categorical type")
-    cat_to_num_converted_columns = ['Job', 'Sex', 'Housing', 'Saving accounts', 'Checking account', 'Purpose']  # Note that binary columns must be left numerical
+    cat_to_num_converted_columns = ['job', 'sex', 'housing', 'saving_accounts', 'checking_account', 'purpose']  # Note that binary columns must be left numerical
     gcr[cat_to_num_converted_columns] = gcr[cat_to_num_converted_columns].astype('category')
     print("Replace category values with their numerical codes")
     # Store the correspondance {catcode: catvalue} for future analyses. TODO: return and store this mapping.
@@ -105,28 +108,28 @@ def preprocess_data(gcr: pd.DataFrame) -> pd.DataFrame:
     This would involve grouping the data based on a correlated categorical feature and using the mean/median/mode specific to each group for imputation.
     Potential correlations between an uncorrupted categorical feature and a corrupted categorical or numerical feature can be revealed by chi2 tests or anova tests respectively. 
     
-    Example: Evaluate correlation between "Saving account" (categorical) and other categorical features, then perform group-wise value imputation according to the most correlated one. 
+    Example: Evaluate correlation between "saving_account" (categorical) and other categorical features, then perform group-wise value imputation according to the most correlated one. 
     
     print("To evaluate the possibility of group-wise missing value imputation, evaluate the relationship between features "
           "with missing values and categorical features without missing values.")
-    features_with_missing_values = ["Saving accounts", "Checking account"]
+    features_with_missing_values = ["saving_accounts", "checking_account"]
     for tested_feature in features_with_missing_values:
         chi_results, anova_results = evaluate_relationship_with_cat(gcr, tested_feature, verbose=True)
 
-    # I noticed that the mode values of "Checking account" change significantly across different "Purpose" groups. Let's 
+    # I noticed that the mode values of "checking_account" change significantly across different "purpose" groups. Let's 
     # compare the global and group-wise modes. 
     
-    global_mode = gcr['Checking account'].mode()[0]
-    print(f"Global mode for 'Checking account':\n{global_mode}")
+    global_mode = gcr['checking_account'].mode()[0]
+    print(f"Global mode for 'checking_account':\n{global_mode}")
 
-    print("Group-wise mode for 'Checking account' by 'Purpose':")
-    group_modes = gcr.groupby('Purpose')['Checking account'].agg(lambda x: pd.Series.mode(x)[0]).reset_index(name='Mode')
+    print("Group-wise mode for 'checking_account' by 'purpose':")
+    group_modes = gcr.groupby('purpose')['checking_account'].agg(lambda x: pd.Series.mode(x)[0]).reset_index(name='Mode')
     print(group_modes)
         
-    # One can impute missing values of "Checking account" "Purpose"-wise as opposed to globally.
+    # One can impute missing values of "checking_account" "purpose"-wise as opposed to globally.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
-        gcr["Checking account"] = gcr.groupby("Purpose")["Checking account"].transform(lambda x: x.fillna(x.mode()[0]))
+        gcr["checking_account"] = gcr.groupby("purpose")["checking_account"].transform(lambda x: x.fillna(x.mode()[0]))
     """
 
     # Print a summary of the preprocessed dataset

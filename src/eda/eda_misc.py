@@ -43,12 +43,13 @@ def check_outliers(data: pd.DataFrame,
         pd.Series: Series indicating outliers (1 for outlier, 0 for non-outlier).
         Two figures (optional): Figure handles for the visualization of outliers in 2d projctions and in violinplots.
     """
+    if color_labels is not None and len(color_labels) != len(data):
+        raise ValueError("The pd.Series color_labels must match the data length.")
+
     # Sample data if necessary
     if sample_size and sample_size < len(data):
         data = subsample_regular_interval(df=data, sample_size=sample_size)
-
-    if color_labels is not None and len(color_labels) != len(data):
-        raise ValueError("The pd.Series color_labels must match the data length.")
+        color_labels = subsample_regular_interval(df=color_labels, sample_size=sample_size)
 
     print("\n### Outliers in the continuous features ###\n")
     print("Detecting outliers with Random Isolation Forest:")

@@ -5,18 +5,18 @@ Users can specify model parameters, choose to train a new model or use a pre-tra
 
 Example CLI call:
 python german_credit_risk_db.py
---data_path ../../data/external/gcrdb/gcrdb.csv
+--data_path ../../data/external/gcrdb/
 --data_loading_fn load_gcrdb
+--preprocessing_fn preprocess_gcrdb
+--eda_fn eda_gcrdb
+--feature_extraction_fn features_gcrdb
+--split_fn split_train_test
+--split_ratio "70 30"
 --model sklearn_compatible_LGBMClassifier
 --hparams "{\"sklearn_compatible_LGBMClassifier__n_estimators\": \"randint(100, 500)\"}"
 --hopt_n_rndcv_samplings 3
 --hopt_subsampling_fn subsampling_passthrough
 --hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_gcrdb
---eda_fn eda_gcrdb
---feature_extraction_fn features_gcrdb
---split_fn split_train_test
---split_ratio "80 20"
 --n_folds 3
 --prediction_fn predict_sklearn
 --evaluation_fn evaluate_gcrdb
@@ -27,6 +27,32 @@ python german_credit_risk_db.py
 --output_model_dir ../../models/
 --output_reports_dir ../../outputs/reports/
 --output_figures_dir ../../outputs/figures/
+
+IF FEATURES WERE PRECOMPUTED:
+python german_credit_risk_db.py
+--precomputed_features_path ../../data/processed/gcrdb/
+--preprocessing_fn preprocess_gcrdb
+--eda_fn eda_gcrdb
+--feature_extraction_fn features_gcrdb
+--split_fn split_train_test
+--split_ratio "70 30"
+--model sklearn_compatible_LGBMClassifier
+--hparams "{\"sklearn_compatible_LGBMClassifier__n_estimators\": \"randint(100, 500)\"}"
+--hopt_n_rndcv_samplings 3
+--hopt_subsampling_fn subsampling_passthrough
+--hopt_subsampling_rate 1.0
+--n_folds 3
+--prediction_fn predict_sklearn
+--evaluation_fn evaluate_gcrdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ../../data/processed/
+--output_model_dir ../../models/
+--output_reports_dir ../../outputs/reports/
+--output_figures_dir ../../outputs/figures/
+
+
 
 """
 import argparse
@@ -66,6 +92,7 @@ import src.evaluation.evaluate_exampledb
 import src.evaluation.evaluate_gcrdb
 import src.evaluation.evaluate_m5salesdb
 import src.features.features_exampledb
+import src.features.features_gcrdb
 import src.features.features_m5salesdb
 import src.models.custom_linear_regressor
 import src.prediction.predict_m5salesdb
@@ -106,7 +133,7 @@ EDA_FNS: Dict[str, Callable] = {
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_exampledb": src.features.features_exampledb.extract_features,
     "features_m5salesdb": src.features.features_m5salesdb.extract_features,
-    "features_gcrdb": src.features.features_m5salesdb.extract_features,
+    "features_gcrdb": src.features.features_gcrdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
     "split_passthrough": lambda *args, **kwargs: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], {}),
@@ -498,7 +525,7 @@ def main(parsed_args: argparse.Namespace) -> None:
         warnings.filterwarnings("ignore", message="X does not have valid feature names, but Ridge was fitted with feature names")
         warnings.filterwarnings("ignore", message="pandas.DataFrame with sparse columns found.It will be converted to a dense numpy array.")
 
-        # Construct the Transformers List Dynamically
+        # Construct the data transformers list dynamically
         transformer_instances = []
         for transformer_name in parsed_args.data_transformers:
             TransformerClass = DATA_TRANSFORMERS.get(transformer_name)
@@ -668,11 +695,19 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # Evaluate model predictions
     logger.info("Evaluating model predictions...")
+
+    if isinstance(Y_test, pd.DataFrame):
+        target_names = Y_test.columns.tolist()
+    elif isinstance(Y_test, pd.Series):
+        target_names = [Y_test.name]
+    else:
+        target_names = None
+
     scores, figs = evaluate_fn(
         Y_test.squeeze(),
         Y_pred,
         model,
-        Y_test.columns.tolist() if isinstance(Y_test, (pd.DataFrame, pd.Series)) else None,
+        target_names,
         Y_train.squeeze(),
         Y_train_pred,
         **aux_eval_params,
@@ -781,9 +816,9 @@ def main(parsed_args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Machine Learning Script")
-    parser.add_argument('--data_path', required=True, help='Path to the data file')
-    parser.add_argument('--data_loading_fn', required=True, choices=DATA_LOADING_FNS.keys(), help='Function identifier for loading data')
-    parser.add_argument('--precomputed_features_path', type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
+    parser.add_argument('--data_path', required=False, help='Path to the data file')
+    parser.add_argument('--data_loading_fn', required=False, choices=DATA_LOADING_FNS.keys(), help='Function identifier for loading data')
+    parser.add_argument('--precomputed_features_path', required=False, type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
