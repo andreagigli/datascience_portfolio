@@ -3,6 +3,7 @@ from typing import Union
 import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
+from tabulate import tabulate
 
 
 def convert_df_to_sparse_matrix(df: pd.DataFrame, fill_value: Union[int, float] = 0) -> csr_matrix:
@@ -156,6 +157,21 @@ def downcast(df):
         df = df["value"]
 
     return df
+
+
+def pprint_db(df: pd.DataFrame, title: [str] = None) -> None:
+    """
+    Prints dataframe in a custom formatted way.
+
+    Args:
+        df (pd.DataFrame): The data to be printed
+        title (str, optional): Title for the print section.
+    """
+    print("\n============================================================")
+    print(f"{'DATAFRAME' if title is None else title.upper()}")
+    print("============================================================")
+    print(tabulate(df, headers='keys', tablefmt='psql'))
+    print("============================================================\n")
 
 
 def subsample_regular_interval(df: pd.DataFrame, sample_size: int) -> pd.DataFrame:
