@@ -1,9 +1,107 @@
 """
 Example CLI calls.
 
+--- EXAMPLE DATASET CALIFORNIA HOUSING ---
+python ./scripts/exploratory/analysis_template.py
+--data_path ./data/external/exampledb/california_housing.csv
+--data_loading_fn load_exampledb
+--model sklearn_RandomForestRegressor
+--hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
+--hopt_n_rndcv_samplings 5
+--hopt_subsampling_fn hopt_subsampling_passthrough
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_passthrough
+--eda_fn eda_passthrough
+--feature_extraction_fn features_exampledb
+--split_fn split_train_test
+--split_ratio "80 20"
+--n_folds 3
+--prediction_fn predict_sklearn
+--evaluation_fn evaluate_exampledb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ./data/processed/
+--output_model_dir ./models/
+--output_reports_dir ./outputs/reports/
+--output_figures_dir ./outputs/figures/
+
+
+--- SALES PREDICTION ON M5 SALES DATASET ---
+PREFERRED: using LGBMRegressor (handles large datasets, without need to one-hot encode cathegorical variables)
+python analysis_exampledb.py
+--data_path ./data/external/m5salesdb/
+--data_loading_fn load_m5salesdb
+--model sklearn_compatible_LGBMRegressor
+--hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
+--hopt_n_rndcv_samplings 5
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
+--evaluation_fn evaluate_m5salesdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ./data/processed/
+--output_model_dir ./models/
+--output_reports_dir ./outputs/reports/
+--output_figures_dir ./outputs/figures/
+
+IF FEATURES WERE PRECOMPUTED:
+python analysis_exampledb.py
+--precomputed_features_path ./data/processed/m5salesdb_debug_100/
+--model sklearn_compatible_LGBMRegressor
+--hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
+--hopt_n_rndcv_samplings 5
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
+--evaluation_fn evaluate_m5salesdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ./data/processed/
+--output_model_dir ./models/
+--output_reports_dir ./outputs/reports/
+--output_figures_dir ./outputs/figures/
+
+FASTER, FOR DEBUG:
+python analysis_exampledb.py
+--precomputed_features_path ./data/processed/m5salesdb_debug_10/
+--model sklearn_compatible_LGBMRegressor
+--hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
+--hopt_n_rndcv_samplings 5
+--hopt_subsampling_fn subsample_train_m5salesdb
+--hopt_subsampling_rate 1.0
+--preprocessing_fn preprocess_m5salesdb
+--eda_fn eda_m5salesdb
+--feature_extraction_fn features_m5salesdb
+--split_fn split_m5salesdb
+--prediction_fn predict_m5salesdb
+--look_back_days_sequential_prediction 380
+--evaluation_fn evaluate_m5salesdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ./data/processed/
+--output_model_dir ./models/
+--output_reports_dir ./outputs/reports/
+--output_figures_dir ./outputs/figures/
+
+
 --- LOAN RISK MANAGEMENT ON GERMAN CREDIT RISK DATASET ---
 python analysis_template.py
---data_path ../../data/external/gcrdb/
+--data_path ./data/external/gcrdb/
 --data_loading_fn load_gcrdb
 --preprocessing_fn preprocess_gcrdb
 --eda_fn eda_gcrdb
@@ -21,14 +119,14 @@ python analysis_template.py
 --log_level INFO
 --random_seed 0
 --save_output
---output_data_dir ../../data/processed/
---output_model_dir ../../models/
---output_reports_dir ../../outputs/reports/
---output_figures_dir ../../outputs/figures/
+--output_data_dir ./data/processed/
+--output_model_dir ./models/
+--output_reports_dir ./outputs/reports/
+--output_figures_dir ./outputs/figures/
 
 (Faster alternative: reload preprocessed data, skip eda, use simpler model and skip hopt)
 python analysis_template.py
---precomputed_features_path ../../data/processed/gcrdb/
+--precomputed_features_path ./data/processed/gcrdb/
 --preprocessing_fn preprocess_gcrdb
 --eda_fn eda_gcrdb
 --feature_extraction_fn features_gcrdb
@@ -39,47 +137,7 @@ python analysis_template.py
 --evaluation_fn evaluate_gcrdb
 --log_level INFO
 --random_seed 0
-
-
---- SALES PREDICTION ON M5 SALES DATASET ---
-python analysis_template.py
---data_path ../../data/external/m5salesdb/
---data_loading_fn load_m5salesdb
---model sklearn_compatible_LGBMRegressor
---hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
---hopt_n_rndcv_samplings 5
---hopt_subsampling_fn hopt_subsampling_m5salesdb
---hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_m5salesdb
---eda_fn eda_m5salesdb
---feature_extraction_fn features_m5salesdb
---split_fn split_m5salesdb
---prediction_fn predict_m5salesdb
---look_back_days_sequential_prediction 380
---evaluation_fn evaluate_m5salesdb
---log_level INFO
---random_seed 0
---save_output
---output_data_dir ../../data/processed/
---output_model_dir ../../models/
---output_reports_dir ../../outputs/reports/
---output_figures_dir ../../outputs/figures/
-
-(Faster alternative: reload preprocessed portion of the data, skip eda, use simpler model and skip hopt)
-python analysis_template.py
---precomputed_features_path ../../data/processed/m5salesdb_debug_10/
---eda_fn eda_passthrough
---feature_extraction_fn features_m5salesdb
---split_fn split_m5salesdb
---model sklearn_compatible_LGBMRegressor
---prediction_fn predict_m5salesdb
---look_back_days_sequential_prediction 380
---evaluation_fn evaluate_m5salesdb
---log_level INFO
---random_seed 0
-
 """
-
 import logging
 import os
 
