@@ -14,7 +14,7 @@ from src.eda.eda_fns import eda_passthrough, eda_m5salesdb, eda_gcrdb
 from src.evaluation.evaluation_fns import evaluate_exampledb, evaluate_m5salesdb, evaluate_gcrdb, evaluate_passthrough
 from src.features.features_fns import extract_features_exampledb, extract_features_m5salesdb, \
     extract_features_gcrdb
-from src.models.custom_linear_regressor import CustomModel
+from src.models.custom_models import CustomLinearRegression
 from src.optimization.hopt_subsampling_fns import hopt_subsampling_passthrough, hopt_subsampling_m5salesdb
 from src.prediction.prediction_fns import predict_sklearn, predict_m5salesdb, predict_zeros
 from src.utils.my_argparsing import FunctionRegistry
@@ -67,7 +67,7 @@ def register_all_functions(function_registry: FunctionRegistry):
     function_registry.register("sklearn_HistGradientBoostingRegressor", HistGradientBoostingRegressor)
     function_registry.register("sklearn_compatible_LGBMRegressor", LGBMRegressor)
     function_registry.register("sklearn_compatible_LGBMClassifier", LGBMClassifier)
-    function_registry.register("mymodel", CustomModel)
+    function_registry.register("mymodel", CustomLinearRegression)
 
     # Data Transformers
     function_registry.register("sklearn_RBFSampler", RBFSampler)

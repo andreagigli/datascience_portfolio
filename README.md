@@ -200,51 +200,52 @@ import src.evaluation.evaluate_newdb
 ```
 
 Associate the imported modules with their command-line identifier, to allow for dynamic function mapping based on command-line arguments:
+
 ```python
 MODELS = {
     ...
-    "sklearn_SVC": sklearn.svm.SVC,
-    "sklearn_compatible_CustomModule": src.models.custom_model.CustomModel,  # ensure the id starts with "sklearn_compatible_" if the CustomModel is compatible with scikit-learn's estimator interface 
+"sklearn_SVC": sklearn.svm.SVC,
+"sklearn_compatible_CustomModule": src.models.custom_model.CustomLinearRegression,  # ensure the id starts with "sklearn_compatible_" if the CustomModel is compatible with scikit-learn's estimator interface 
 }
 
 DATA_LOADING_FNS = {
     ...
-    "load_newdb": src.data.data_newdb.load_data,
+"load_newdb": src.data.data_newdb.load_data,
 }
 
 PREPROCESSING_FNS = {
     ...
-    "preprocess_newdb": src.data.data_newdb.preprocess_data,
+"preprocess_newdb": src.data.data_newdb.preprocess_data,
 }
 
 EDA_FNS = {
     ...
-    "eda_newdb": src.eda.eda_newdb.eda,
+"eda_newdb": src.eda.eda_newdb.eda,
 }
 
 FEATURE_EXTRACTION_FNS = {
     ...
-    "features_newdb": src.features.features_newdb.extract_features,
+"features_newdb": src.features.features_newdb.extract_features,
 }
 
 SPLITTING_FNS = {
     ...
-    "split_newdb": src.data.data_newdb.split_data,
+"split_newdb": src.data.data_newdb.split_data,
 }
 
 HOPT_SUBSAMPLING_FNS = {
     ...
-    "subsample_newdb": src.data.data_newdb.subsample_items,
+"subsample_newdb": src.data.data_newdb.subsample_items,
 }
 
 PREDICTION_FNS = {
     ...
-    "predict_newdb": src.prediction.predict_newdb.predict,
+"predict_newdb": src.prediction.predict_newdb.predict,
 }
 
 EVALUATION_FNS = {
     ...
-    "evaluate_newdb": src.evaluation.evaluate_newdb.evaluate,
+"evaluate_newdb": src.evaluation.evaluate_newdb.evaluate,
 }
 
 ```
