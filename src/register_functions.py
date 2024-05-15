@@ -12,7 +12,7 @@ from src.data.split_data_fns import split_data_train_test, split_data_train_val_
     split_data_passthrough
 from src.eda.eda_fns import eda_passthrough, eda_m5salesdb, eda_gcrdb
 from src.evaluation.evaluation_fns import evaluate_exampledb, evaluate_m5salesdb, evaluate_gcrdb, evaluate_passthrough
-from src.features.extract_features_fns import extract_features_exampledb, extract_features_m5salesdb, \
+from src.features.features_fns import extract_features_exampledb, extract_features_m5salesdb, \
     extract_features_gcrdb
 from src.models.custom_linear_regressor import CustomModel
 from src.optimization.hopt_subsampling import hopt_subsampling_passthrough, hopt_subsampling_m5salesdb
