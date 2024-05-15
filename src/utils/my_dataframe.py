@@ -59,6 +59,34 @@ def convert_to_dataframe(data: Union[np.ndarray, pd.DataFrame, pd.Series], prefi
         raise ValueError("Unsupported data type for conversion.")
 
 
+def custom_info(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    """
+    Generates a summary DataFrame containing the number of nans, the type, that number of unique values for each column in the provided DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame for which the summary is to be generated.
+
+    Returns:
+        pd.DataFrame: A new DataFrame with columns for the name of each column in `df`, the data type of each column,
+                      the number of NaN values in each column, and the number of distinct values in each column.
+    """
+    # Creating the summary DataFrame
+    summary_df = pd.DataFrame({
+        "Column Name": df.columns,
+        "Data Type": df.dtypes,
+        "Number of NaNs": df.isna().sum(),
+        "Number of Distinct Values": df.nunique()
+    })
+
+    # Resetting index to make it more readable
+    summary_df.reset_index(drop=True, inplace=True)
+
+    if verbose:
+        print(f"Custom information about the dataframe: \n{summary_df}")
+
+    return summary_df
+
+
 def downcast(df):
     """
     Optimizes a DataFrame's memory usage by downcasting numeric types and converting strings to categories where appropriate.
@@ -128,3 +156,21 @@ def downcast(df):
         df = df["value"]
 
     return df
+
+
+def subsample_regular_interval(df: pd.DataFrame, sample_size: int) -> pd.DataFrame:
+    """
+    Subsample a DataFrame by selecting rows at regular intervals based on the desired sample size.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to subsample.
+        sample_size (int): The number of samples to select.
+
+    Returns:
+        pd.DataFrame: A subsampled DataFrame with the specified number of samples.
+    """
+    total_rows = len(df)
+    step = max(1, total_rows // sample_size)  # Calculate step size, ensure it's at least 1
+    subsampled_df = df.iloc[::step]  # Select rows at intervals of the step size
+
+    return subsampled_df.head(sample_size)  # Return exactly `sample_size` elements

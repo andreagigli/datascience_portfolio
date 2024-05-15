@@ -4,22 +4,22 @@ It allows for dynamic loading of data, preprocessing, eda, feature extraction, m
 Users can specify model parameters, choose to train a new model or use a pre-trained one, control data splitting for training and testing, and whether to save the outputs or not.
 
 Example CLI call:
-python analysis_exampledb.py
---data_path ../../data/external/exampledb/california_housing.csv
---data_loading_fn load_exampledb
---model sklearn_RandomForestRegressor
---hparams "{\"sklearn_RandomForestRegressor__n_estimators\": \"randint(20, 200)\", \"sklearn_RandomForestRegressor__max_depth\": 10}"
---hopt_n_rndcv_samplings 5
+python german_credit_risk_db.py
+--data_path ../../data/external/gcrdb/
+--data_loading_fn load_gcrdb
+--preprocessing_fn preprocess_gcrdb
+--eda_fn eda_gcrdb
+--feature_extraction_fn features_gcrdb
+--split_fn split_train_test
+--split_ratio "70 30"
+--model sklearn_compatible_LGBMClassifier
+--hparams "{\"sklearn_compatible_LGBMClassifier__n_estimators\": \"randint(100, 500)\"}"
+--hopt_n_rndcv_samplings 3
 --hopt_subsampling_fn subsampling_passthrough
 --hopt_subsampling_rate 1.0
---preprocessing_fn preprocess_passthrough
---eda_fn eda_passthrough
---feature_extraction_fn features_exampledb
---split_fn split_train_test
---split_ratio "80 20"
 --n_folds 3
 --prediction_fn predict_sklearn
---evaluation_fn evaluate_exampledbcorre
+--evaluation_fn evaluate_gcrdb
 --log_level INFO
 --random_seed 0
 --save_output
@@ -27,6 +27,32 @@ python analysis_exampledb.py
 --output_model_dir ../../models/
 --output_reports_dir ../../outputs/reports/
 --output_figures_dir ../../outputs/figures/
+
+IF FEATURES WERE PRECOMPUTED:
+python german_credit_risk_db.py
+--precomputed_features_path ../../data/processed/gcrdb/
+--preprocessing_fn preprocess_gcrdb
+--eda_fn eda_gcrdb
+--feature_extraction_fn features_gcrdb
+--split_fn split_train_test
+--split_ratio "70 30"
+--model sklearn_compatible_LGBMClassifier
+--hparams "{\"sklearn_compatible_LGBMClassifier__n_estimators\": \"randint(100, 500)\"}"
+--hopt_n_rndcv_samplings 3
+--hopt_subsampling_fn subsampling_passthrough
+--hopt_subsampling_rate 1.0
+--n_folds 3
+--prediction_fn predict_sklearn
+--evaluation_fn evaluate_gcrdb
+--log_level INFO
+--random_seed 0
+--save_output
+--output_data_dir ../../data/processed/
+--output_model_dir ../../models/
+--output_reports_dir ../../outputs/reports/
+--output_figures_dir ../../outputs/figures/
+
+
 
 """
 import argparse
@@ -44,8 +70,7 @@ from typing import Any, Callable, Dict, Optional, Type, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMRegressor
-from scipy.sparse import csr_matrix
+from lightgbm import LGBMRegressor, LGBMClassifier
 from scipy.stats import loguniform, randint, uniform, rv_continuous, rv_discrete
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
@@ -56,22 +81,23 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import SVC
 
+import src.data.data_gcrdb
 import src.data.data_m5salesdb
 import src.data.load_exampledb
 import src.data.split_train_test
 import src.data.split_train_val_test
+import src.eda.eda_gcrdb
 import src.eda.eda_m5salesdb
 import src.evaluation.evaluate_exampledb
+import src.evaluation.evaluate_gcrdb
 import src.evaluation.evaluate_m5salesdb
 import src.features.features_exampledb
+import src.features.features_gcrdb
 import src.features.features_m5salesdb
 import src.models.custom_linear_regressor
 import src.prediction.predict_m5salesdb
-from src.eda.eda_misc import plot_correlation_heatmap, plot_pairwise_scatterplots
 from src.optimization.custom_sk_validators import PredefinedSplit
-from src.utils.my_dataframe import convert_df_to_sparse_matrix
 from src.utils.my_os import ensure_dir_exists
-
 
 # Dictionaries for mapping identifiers to strings representing sklearn or custom functions
 MODELS: Dict[str, Type[BaseEstimator]] = {
@@ -81,6 +107,7 @@ MODELS: Dict[str, Type[BaseEstimator]] = {
     "sklearn_RandomForestRegressor": RandomForestRegressor,
     "sklearn_HistGradientBoostingRegressor": HistGradientBoostingRegressor,
     "sklearn_compatible_LGBMRegressor": LGBMRegressor,
+    "sklearn_compatible_LGBMClassifier": LGBMClassifier,
     "mymodel": src.models.custom_linear_regressor.CustomModel,
 }
 DATA_TRANSFORMERS: Dict[str, Type[Union[TransformerMixin, BaseEstimator]]] = {
@@ -91,18 +118,22 @@ DATA_TRANSFORMERS: Dict[str, Type[Union[TransformerMixin, BaseEstimator]]] = {
 DATA_LOADING_FNS: Dict[str, Callable] = {
     "load_exampledb": src.data.load_exampledb.load_data,
     "load_m5salesdb": src.data.data_m5salesdb.load_data,
+    "load_gcrdb": src.data.data_gcrdb.load_data,
 }
 PREPROCESSING_FNS: Dict[str, Callable] = {
     "preprocess_passthrough": lambda *args, **kwargs: (args, kwargs) if kwargs else args,
     "preprocess_m5salesdb": src.data.data_m5salesdb.preprocess_data,
+    "preprocess_gcrdb": src.data.data_gcrdb.preprocess_data,
 }
 EDA_FNS: Dict[str, Callable] = {
     "eda_passthrough": lambda *args, **kwargs:  None,
     "eda_m5salesdb": src.eda.eda_m5salesdb.eda,
+    "eda_gcrdb": src.eda.eda_gcrdb.eda,
 }
 FEATURE_EXTRACTION_FNS: Dict[str, Callable] = {
     "features_exampledb": src.features.features_exampledb.extract_features,
     "features_m5salesdb": src.features.features_m5salesdb.extract_features,
+    "features_gcrdb": src.features.features_gcrdb.extract_features,
 }
 SPLITTING_FNS: Dict[str, Callable] = {
     "split_passthrough": lambda *args, **kwargs: (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], {}),
@@ -127,6 +158,7 @@ EVALUATION_FNS: Dict[str, Callable] = {
     "evaluate_passthrough": lambda *args, **kwargs: (pd.DataFrame(), {}),
     "evaluate_exampledb": src.evaluation.evaluate_exampledb.evaluate,
     "evaluate_m5salesdb": src.evaluation.evaluate_m5salesdb.evaluate,
+    "evaluate_gcrdb": src.evaluation.evaluate_gcrdb.evaluate,
 }
 
 
@@ -165,6 +197,7 @@ def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
     if (split_fn == "split_train_test" or split_fn == "split_train_val_test") and split_ratio is None:
         raise ValueError("split_ratio must be provided for splitting functions 'split_train_test' and 'split_train_val_test'.")
 
+    ratios = []
     if split_ratio is not None:
         # Check that split ratio is a string of numbers separated by spaces
         try:
@@ -182,13 +215,13 @@ def check_split_args(split_fn: str, split_ratio: str, model: str) -> None:
     # if "sklearn" in model_module:
     #     if split_fn == "split_train_val_test":
     #         raise ValueError("Splitting function 'split_train_val_test' incompatible with sklearn models.")
-    #     if len(ratios) != 2:
+    #     if split_ratio is None or len(ratios) != 2:
     #         raise ValueError("Split ratio for sklearn models must contain exactly two numbers.")
 
     if "tensorflow" in model_module or "torch" in model_module:
         if split_fn == "split_train_test":
             raise ValueError("Splitting function 'split_train_test' incompatible with sklearn models.")
-        if len(ratios) != 3:
+        if split_ratio is None or len(ratios) != 3:
             raise ValueError("Split ratio for TensorFlow/PyTorch models must contain exactly three numbers.")
 
 
@@ -418,7 +451,7 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # Save the extract_feature_fn into the predict parameters as it may be necessary for some custom prediction function, such as sequential prediction
     aux_predict_params["extract_features_fn"] = extract_features_fn
-    
+
     # Initialize model or reload existing one
     model = init_reload_model(parsed_args)
 
@@ -455,15 +488,9 @@ def main(parsed_args: argparse.Namespace) -> None:
         X = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "X.pkl"))
         Y = pd.read_pickle(os.path.join(parsed_args.precomputed_features_path, "Y.pkl"))
 
-    # # Explore relationships between feature-feature and between feature-target
-    # compute_relationship(data=pd.concat((X, y), axis=1, ignore_index=True), score_func="pearson", sample_size=1000, plot_heatmap=True, include_diagonal=True)
-    # compute_relationship(data=pd.concat((X, y), axis=1, ignore_index=True), score_func="spearman", sample_size=1000, plot_heatmap=True, include_diagonal=True)
-    # columns_to_plot = [...]
-    # plot_pairwise_scatterplot(data=pd.concat((X, y), axis=1, ignore_index=True), columns_to_plot=columns_to_plot, sample_size=100)
-
     # Parse split arguments
     if parsed_args.split_ratio is not None:  # Parse the split_ratio if provided
-        split_ratios = [int(item) for item in parsed_args.split_ratio.split()]
+        split_ratios = [float(item) for item in parsed_args.split_ratio.split()]  # Format correctness was already checked
         if len(split_ratios) != 2 and len(split_ratios) != 3:
             raise ValueError("split_ratio must include two or three integers for train-test or train-val-test percentages.")
         aux_split_params["train_prc"] = split_ratios[0]
@@ -498,7 +525,7 @@ def main(parsed_args: argparse.Namespace) -> None:
         warnings.filterwarnings("ignore", message="X does not have valid feature names, but Ridge was fitted with feature names")
         warnings.filterwarnings("ignore", message="pandas.DataFrame with sparse columns found.It will be converted to a dense numpy array.")
 
-        # Construct the Transformers List Dynamically
+        # Construct the data transformers list dynamically
         transformer_instances = []
         for transformer_name in parsed_args.data_transformers:
             TransformerClass = DATA_TRANSFORMERS.get(transformer_name)
@@ -668,11 +695,19 @@ def main(parsed_args: argparse.Namespace) -> None:
 
     # Evaluate model predictions
     logger.info("Evaluating model predictions...")
+
+    if isinstance(Y_test, pd.DataFrame):
+        target_names = Y_test.columns.tolist()
+    elif isinstance(Y_test, pd.Series):
+        target_names = [Y_test.name]
+    else:
+        target_names = None
+
     scores, figs = evaluate_fn(
         Y_test.squeeze(),
         Y_pred,
         model,
-        Y_test.columns.tolist() if isinstance(Y_test, (pd.DataFrame, pd.Series)) else None,
+        target_names,
         Y_train.squeeze(),
         Y_train_pred,
         **aux_eval_params,
@@ -781,9 +816,9 @@ def main(parsed_args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Machine Learning Script")
-    parser.add_argument('--data_path', required=True, help='Path to the data file')
-    parser.add_argument('--data_loading_fn', required=True, choices=DATA_LOADING_FNS.keys(), help='Function identifier for loading data')
-    parser.add_argument('--precomputed_features_path', type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
+    parser.add_argument('--data_path', required=False, help='Path to the data file')
+    parser.add_argument('--data_loading_fn', required=False, choices=DATA_LOADING_FNS.keys(), help='Function identifier for loading data')
+    parser.add_argument('--precomputed_features_path', required=False, type=str, help='Path to pre-computed features to skip loading, preprocessing, and feature extraction')
     parser.add_argument('--model', choices=MODELS.keys(), help='Model identifier')
     parser.add_argument('--data_transformers', nargs='*', default=[], help='List of transformer identifiers, e.g., sklearn_RBFSampler sklearn_StandardScaler')
     parser.add_argument('--hparams', default=None, help='JSON string of hyperparameters for the data transformers or the model')
