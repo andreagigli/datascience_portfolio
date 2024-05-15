@@ -5,7 +5,41 @@ import numpy as np
 import pandas as pd
 
 
-def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def extract_features_exampledb(X: pd.DataFrame, Y: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Accepts features (X) and target (Y) data as separate DataFrames and returns them without modification.
+
+    Args:
+        X: Features data as a pandas DataFrame.
+        Y: Target data as a pandas DataFrame.
+
+    Returns:
+        A tuple of (X, Y), the features and target data as provided.
+    """
+    return X, Y
+
+
+def extract_features_gcrdb(data: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Extract features and target variable from the given DataFrame.
+
+    Args:
+        data (pd.DataFrame): The input DataFrame containing the features and target variable.
+        *args: Additional arguments.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing the features (X) and the target variable (Y).
+            - X (pd.DataFrame): Design matrix (n_samples, n_features).
+            - Y (pd.DataFrame): Series containing the target variable 'Good risk'.
+    """
+    Y = data["good_risk"]
+    X = data.drop(columns=["good_risk"])
+
+    return X, Y
+
+
+def extract_features_m5salesdb(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Extract and generate a set of features for the sales DataFrame, including lag and robust lag features,
     mean encodings, rolling-window and expanding-window statistics, detrended features, one-hot encoding of categorical
@@ -61,7 +95,8 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
         # Create the lagged column
         sales[f"sold_lag_{lag}"] = sales.groupby("id")["sold"].shift(lag).astype(np.float16)
         # Backfill the NaN values in the lagged columns for each group
-        sales[f"sold_lag_{lag}"] = sales.groupby("id")[f"sold_lag_{lag}"].bfill()  # IMPORTANT: do not use .transform(lambda x: x.bfill()) if the dtype is different from np.float32
+        sales[f"sold_lag_{lag}"] = sales.groupby("id")[
+            f"sold_lag_{lag}"].bfill()  # IMPORTANT: do not use .transform(lambda x: x.bfill()) if the dtype is different from np.float32
 
     # Robust lag features: obtained as a lagged rolling window (e.g. a window of size 3 computed 7 days before the current value)
     if extract_features_only_for_these_days is None:
@@ -74,49 +109,66 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
         sales[f"sold_robustlag_{lag}"] = sales.groupby("id")["sold"].transform(
             lambda x: x.shift(lag)  # Shift the "sold" column by the specified lag to get the lagged data
             .rolling(window=window_size, min_periods=1)  # Apply rolling mean to the lagged data
-            .mean()  # IMPORTANT: when you want to compute aggregated values over a group and pass it to the original, not grouped dataframe, use .transform(lambda x: x.mean()) and not .apply() or .mean()
+            .mean()
+            # IMPORTANT: when you want to compute aggregated values over a group and pass it to the original, not grouped dataframe, use .transform(lambda x: x.mean()) and not .apply() or .mean()
         ).astype(np.float16)
         sales[f"sold_robustlag_{lag}"] = sales.groupby("id")[f"sold_robustlag_{lag}"].bfill()
 
     # Compute mean encodings
     if extract_features_only_for_these_days is None:
         print("Compute target encodings")
-    sales["sold_avg_item"] = sales.groupby("item_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_avg_cat"] = sales.groupby("cat_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_avg_dept"] = sales.groupby("dept_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_avg_store"] = sales.groupby("store_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_avg_state"] = sales.groupby("state_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
+    sales["sold_avg_item"] = sales.groupby("item_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(
+        np.float16)
+    sales["sold_avg_cat"] = sales.groupby("cat_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(
+        np.float16)
+    sales["sold_avg_dept"] = sales.groupby("dept_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(
+        np.float16)
+    sales["sold_avg_store"] = sales.groupby("store_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(
+        np.float16)
+    sales["sold_avg_state"] = sales.groupby("state_id", observed=True)["sold"].transform(lambda x: x.mean()).astype(
+        np.float16)
 
-    sales["sold_avg_item_store"] = sales.groupby(["item_id", "store_id"], observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_avg_item_state"] = sales.groupby(["item_id", "state_id"], observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_avg_cat_store"] = sales.groupby(["cat_id", "store_id"], observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_avg_cat_state"] = sales.groupby(["cat_id", "state_id"], observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
+    sales["sold_avg_item_store"] = sales.groupby(["item_id", "store_id"], observed=True)["sold"].transform(
+        lambda x: x.mean()).astype(np.float16)
+    sales["sold_avg_item_state"] = sales.groupby(["item_id", "state_id"], observed=True)["sold"].transform(
+        lambda x: x.mean()).astype(np.float16)
+    sales["sold_avg_cat_store"] = sales.groupby(["cat_id", "store_id"], observed=True)["sold"].transform(
+        lambda x: x.mean()).astype(np.float16)
+    sales["sold_avg_cat_state"] = sales.groupby(["cat_id", "state_id"], observed=True)["sold"].transform(
+        lambda x: x.mean()).astype(np.float16)
 
     # Rolling-window statistics
     if extract_features_only_for_these_days is None:
         print("Compute rolling-window statistics")
     window_sizes = [7, 30, 365]
     for window_size in window_sizes:
-        sales[f"sold_avg_{window_size}d"] = sales.groupby("id", observed=True)["sold"].transform(lambda x: x.rolling(window=window_size).mean()).astype(np.float16)
-        sales[f"sold_avg_{window_size}d"] = sales.groupby("id", observed=True)[f"sold_avg_{window_size}d"].bfill()  # Note: the alternative .transform(lambda x: x.bfill()) would crush if the col type is not np.float32!
+        sales[f"sold_avg_{window_size}d"] = sales.groupby("id", observed=True)["sold"].transform(
+            lambda x: x.rolling(window=window_size).mean()).astype(np.float16)
+        sales[f"sold_avg_{window_size}d"] = sales.groupby("id", observed=True)[
+            f"sold_avg_{window_size}d"].bfill()  # Note: the alternative .transform(lambda x: x.bfill()) would crush if the col type is not np.float32!
 
-    sales["sold_max_14d"] = sales.groupby("id", observed=True)["sold"].transform(lambda x: x.rolling(window=14).max()).astype(np.float16)
+    sales["sold_max_14d"] = sales.groupby("id", observed=True)["sold"].transform(
+        lambda x: x.rolling(window=14).max()).astype(np.float16)
     sales[f"sold_max_14d"] = sales.groupby("id", observed=True)[f"sold_max_14d"].bfill()
 
     # Expanding window statistics
     if extract_features_only_for_these_days is None:
         print("Compute expanding-window statistics")
-    sales["sold_avg_expanding"] = sales.groupby("id", observed=True)["sold"].transform(lambda x: x.expanding().mean()).astype(np.float16)
+    sales["sold_avg_expanding"] = sales.groupby("id", observed=True)["sold"].transform(
+        lambda x: x.expanding().mean()).astype(np.float16)
 
     # Detrended features
     if extract_features_only_for_these_days is None:
         print("Compute detrended features")
     sold_avg_item_day = sales.groupby("id", observed=True)["sold"].transform(lambda x: x.mean()).astype(np.float16)
-    sales["sold_daily_deviation_from_avg"] = sold_avg_item_day - sales["sold_avg_item"]  # Divergence between avg daily sale of an item (across stores) and overall avg of that item
+    sales["sold_daily_deviation_from_avg"] = sold_avg_item_day - sales[
+        "sold_avg_item"]  # Divergence between avg daily sale of an item (across stores) and overall avg of that item
 
-    sales["sold_daily_deviation_from_avg_30d"] = sold_avg_item_day - sales["sold_avg_30d"]  # Divergence between avg daily sale of an item (across stores) and 30d avg of that item
+    sales["sold_daily_deviation_from_avg_30d"] = sold_avg_item_day - sales[
+        "sold_avg_30d"]  # Divergence between avg daily sale of an item (across stores) and 30d avg of that item
     # Backfill the NaN values in the daily deviation from the 30d avg
-    sales[f"sold_daily_deviation_from_avg_30d"] = sales.groupby("id", observed=True)[f"sold_daily_deviation_from_avg_30d"].bfill()
+    sales[f"sold_daily_deviation_from_avg_30d"] = sales.groupby("id", observed=True)[
+        f"sold_daily_deviation_from_avg_30d"].bfill()
 
     # # Trend indicators
     # if extract_features_only_for_these_days is None:
@@ -159,7 +211,7 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
      4. Clustering: Group data based on other features and replace the high-cardinality feature with cluster labels. This
         method reduces dimensionality while potentially capturing intrinsic patterns in the data unrelated to the target.
      5. Dropping the feature: Consider if the feature"s predictive value does not justify the complexity it adds to the model.
-     
+
      In this specific case, I chose to just replace values of categorical columns with category codes. This does not 
      apply to further reiterations of this feature extraction function onto the same dataset (for example for sequential
      prediction) because this operation is only performed on categorical columns, which are converted to integer after 
@@ -204,7 +256,8 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
     if extract_features_only_for_these_days is None:
         print("Separate data into features X and targets Y")
     X = sales.drop(columns=["sold_next_day"]).set_index(["id", "d"])
-    Y = sales.set_index(["id", "d"])[["sold_next_day"]]  # Set Y so to contain sold_next_day and to match the index of the corresponding entry in sales (and X)
+    Y = sales.set_index(["id", "d"])[[
+        "sold_next_day"]]  # Set Y so to contain sold_next_day and to match the index of the corresponding entry in sales (and X)
 
     # Optionally filter the extracted features for the desired days
     if extract_features_only_for_these_days is not None:
@@ -219,3 +272,7 @@ def extract_features(sales: pd.DataFrame, *args, **kwargs) -> Tuple[pd.DataFrame
         # Y = Y.reset_index(drop=True)  # No need to reset the index if Y's index is ("id", "d")
 
     return X, Y
+
+
+def extract_features_passthrough(*args, **kwargs):
+    return None

@@ -5,12 +5,12 @@ import pandas as pd
 from typing import Callable, Optional, Union, Tuple, Dict
 
 
-def predict(model: Callable,
-            X_test: pd.DataFrame,
-            Y_test: Optional[Union[pd.DataFrame, pd.Series]],
-            X_train: pd.DataFrame,
-            Y_train: Optional[Union[pd.DataFrame, pd.Series]],
-            *args, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Dict[str, any]]]:
+def predict_m5salesdb(model: Callable,
+                      X_test: pd.DataFrame,
+                      Y_test: Optional[Union[pd.DataFrame, pd.Series]],
+                      X_train: pd.DataFrame,
+                      Y_train: Optional[Union[pd.DataFrame, pd.Series]],
+                      *args, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Dict[str, any]]]:
     """
     Performs sequential predictions on the test dataset, with optional predictions for training and validation sets.
     The function uses the model to compute the 'sold' for days greater than the specified start day. It then
@@ -105,3 +105,11 @@ def predict(model: Callable,
         optional_predictions = {"Y_val_pred": Y_val_pred, "Y_val": kwargs.get("Y_val")}
 
     return Y_pred, Y_train_pred, optional_predictions
+
+
+def predict_sklearn(model, X_test, Y_test, X_train, Y_train, *args, **kwargs):
+    return model.predict(X_test), model.predict(X_train), None
+
+
+def predict_zeros(model, X_test, Y_test, X_train, Y_train, *args, **kwargs):  # Note: complex signature for consistency across prediction_fns
+    return np.zeros_like(Y_test), np.zeros_like(Y_train), None
