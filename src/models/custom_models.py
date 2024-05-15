@@ -3,7 +3,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
 
-class CustomModel(BaseEstimator, RegressorMixin):
+class CustomLinearRegression(BaseEstimator, RegressorMixin):
     def __init__(self, custom_parameter: float = 1.0) -> None:
         """
         Initializes the CustomModel with a specific parameter.
@@ -14,7 +14,7 @@ class CustomModel(BaseEstimator, RegressorMixin):
         self.custom_parameter = custom_parameter
         self.model = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "CustomModel":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> "CustomLinearRegression":
         """
         Fits the custom model to the training data.
 

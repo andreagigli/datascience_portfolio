@@ -1,70 +1,138 @@
-import numpy as np
-import os
-import pandas as pd
 import re
 import warnings
 
-from pandas import DataFrame
-from typing import Tuple, Optional, List, Dict
+import numpy as np
+import pandas as pd
 
 from src.utils.my_dataframe import downcast
 
 
-def load_data(dpath: str, debug: bool = False) -> Tuple[DataFrame, DataFrame, DataFrame]:
+def preprocess_data_gcrdb(gcr: pd.DataFrame) -> pd.DataFrame:
     """
-    Loads the M5 sales dataset, aimed at forecasting Walmart product sales for the next 28 days.
+    Preprocesses the given DataFrame by performing several data wrangling tasks.
 
-    The sales_train_evaluation.csv file includes historical daily sales data over 1941 days
-    (columns d_1 to d_1941), suitable for splitting into training (d_1 to d_1913) and validation (d_1914 to d_1941) sets.
-    The dataset includes item ID, category, department, store, and state.
-    According to the Kaggle challenge instructions, one should add 28 extra columns (d_1942 to d_1790) for the test
-    predictions.
-
-    The sell_prices.csv file provides selling prices for each item, and calendar.csv contains date-related
-    information for each of the 1941 days (e.g., day of the week, special events).
-
-    Reference: [M5 Forecasting - Accuracy on Kaggle](https://www.kaggle.com/competitions/m5-forecasting-accuracy).
+    Detailed Steps:
+        1. Inspect the structure and properties of the DataFrame including shape, head, data types, and summary statistics.
+        2. Drop the 'id' column as it is typically not useful for modeling.
+        3. Convert the 'risk' column to a numeric binary column 'good_risk'.
+        4. Cast specific columns to categorical types.
+        5. Downcast numerical data to more memory-efficient types.
+        6. Impute missing values for 'saving_accounts' and 'checking_account' using their global modes.
+        7. Optionally, explore group-wise imputation for more accuracy.
 
     Parameters:
-    dpath (str): Path to the dataset CSV files.
-    debug (str): If true eliminates a number of time points for faster processing.
+        gcr (pd.DataFrame): The DataFrame to preprocess.
 
     Returns:
-    sales (pd.DataFrame): Dataframe containing main feature and historical sales for all the items.
-    sell_prices (pd.DataFrame): Dataframe containing sell price of each item.
-    calendar (pd.DataFrame): Dataframe containing the selling data for datapoint (d_* column in sales).
+        pd.DataFrame: The preprocessed DataFrame with modified and imputed data.
     """
-    # Load the dataset
-    sales = pd.read_csv(os.path.join(dpath, "sales_train_evaluation.csv"))
-    sell_prices = pd.read_csv(os.path.join(dpath, "sell_prices.csv"))
-    calendar = pd.read_csv(os.path.join(dpath, "calendar.csv"))
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', None)
 
-    # Add zero sales for the remaining days 1942-1969 (they are present in calendar and sell_prices (as weeks) but not in sales)
-    days = ['d_' + str(d) for d in range(1942, 1970)]
-    sales[days] = 0
-    sales[days] = sales[days].astype(np.int16)
+    # region Inspect dataset 'gcr'
 
-    # Cast all the object columns into string columns
-    sales = sales.astype({col: pd.StringDtype() for col in sales.select_dtypes('object').columns})
-    sell_prices = sell_prices.astype({col:  pd.StringDtype()for col in sell_prices.select_dtypes('object').columns})
-    calendar = calendar.astype({col:  pd.StringDtype() for col in calendar.select_dtypes('object').columns})
+    print("\n\n\n*******************************************")
+    print("************** Inspect 'gcr' **************")
+    print("*******************************************")
+    print("\n************* Dataset structure *************")
+    print("Shape:")
+    print(gcr.shape)
+    print("Head:")
+    print(gcr.head())
+    print("Info:")
+    print(gcr.info(show_counts=True))
 
-    # Eliminate part of the items for faster computation while in debug
-    if debug:
-        keep_n_items_per_category = 100
-        # Sample unique items within each category
-        sampled_items = sales.groupby('cat_id')['item_id'].apply(
-            lambda x: x.drop_duplicates()
-            .sample(n=min(len(x.drop_duplicates()), keep_n_items_per_category), random_state=0)
-        ).reset_index(drop=True)
-        # Filter based on the sampled items
-        sales = sales[sales['item_id'].isin(sampled_items)]
-        sell_prices = sell_prices[sell_prices["item_id"].isin(sampled_items)].reset_index(drop=True)
+    print("\n************* Missing data *************")
+    print(f"The number of missing values in each column is:")
+    print(gcr.isna().sum(axis=0))
 
-    return sales, sell_prices, calendar
+    print("\n************* Data description *************")
+    print("Number of unique values:")
+    print(gcr.nunique())
+    print("Description of numerical columns:")
+    print(gcr.describe())
+
+    # endregion
+
+    # region Data processing
+
+    print("\n\nPreprocess dataframe")
+
+    print("Discard the id column")
+    gcr = gcr.drop(labels=["id"], axis=1)
+
+    print("Impute missing values of the columns 'saving_accounts' and 'checking_account' with global their modes.")
+    gcr["saving_accounts"] = gcr["saving_accounts"].fillna(gcr["saving_accounts"].mode()[0])
+    gcr["checking_account"] = gcr["checking_account"].fillna(gcr["checking_account"].mode()[0])
+
+    print("Convert 'risk' to a numeric column 'good_risk' with values 1 - good and 0 - bad.")
+    gcr["risk"] = (gcr["risk"] == "good").astype('int')
+    gcr = gcr.rename(columns={"risk": "good_risk"})
+    bool_to_num_converted_cols = ["good_risk"]
+
+    print("Cast specific columns to categorical type")
+    cat_to_num_converted_columns = ['job', 'sex', 'housing', 'saving_accounts', 'checking_account',
+                                    'purpose']  # Note that binary columns must be left numerical
+    gcr[cat_to_num_converted_columns] = gcr[cat_to_num_converted_columns].astype('category')
+    print("Replace category values with their numerical codes")
+    # Store the correspondance {catcode: catvalue} for future analyses. TODO: return and store this mapping.
+    catcode_catvalue_mappings = {}
+    for col in cat_to_num_converted_columns:
+        catcode_catvalue_mappings[col] = dict(enumerate(gcr[col].cat.categories))
+        gcr[col] = gcr[col].cat.codes
+
+    # Cast data to most adequate types in order to save memory
+    print("Downcast data to save memory")
+    gcr = downcast(gcr)
+
+    """
+    Note: Considering group-wise instead of global missing value imputation could potentially enhance the accuracy.
+    This would involve grouping the data based on a correlated categorical feature and using the mean/median/mode specific to each group for imputation.
+    Potential correlations between an uncorrupted categorical feature and a corrupted categorical or numerical feature can be revealed by chi2 tests or anova tests respectively. 
+
+    Example: Evaluate correlation between "saving_account" (categorical) and other categorical features, then perform group-wise value imputation according to the most correlated one. 
+
+    print("To evaluate the possibility of group-wise missing value imputation, evaluate the relationship between features "
+          "with missing values and categorical features without missing values.")
+    features_with_missing_values = ["saving_accounts", "checking_account"]
+    for tested_feature in features_with_missing_values:
+        chi_results, anova_results = evaluate_relationship_with_cat(gcr, tested_feature, verbose=True)
+
+    # I noticed that the mode values of "checking_account" change significantly across different "purpose" groups. Let's 
+    # compare the global and group-wise modes. 
+
+    global_mode = gcr['checking_account'].mode()[0]
+    print(f"Global mode for 'checking_account':\n{global_mode}")
+
+    print("Group-wise mode for 'checking_account' by 'purpose':")
+    group_modes = gcr.groupby('purpose')['checking_account'].agg(lambda x: pd.Series.mode(x)[0]).reset_index(name='Mode')
+    print(group_modes)
+
+    # One can impute missing values of "checking_account" "purpose"-wise as opposed to globally.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        gcr["checking_account"] = gcr.groupby("purpose")["checking_account"].transform(lambda x: x.fillna(x.mode()[0]))
+    """
+
+    # Print a summary of the preprocessed dataset
+    print("\n" + "=" * 60)
+    print("INTERPRETATION OF THE POSTPROCESSED DATAFRAME 'gcr'")
+    print("=" * 60)
+    for col in gcr.columns:
+        if col in bool_to_num_converted_cols:
+            print(f"- {col} (boolean)")
+        elif col in cat_to_num_converted_columns:
+            mapping_info = ", ".join([f"{code}-{val}" for code, val in catcode_catvalue_mappings[col].items()])
+            print(f"- {col} (catcode numeric): {mapping_info}")
+        else:
+            print(f"- {col} ({gcr[col].dtype})")
+    print("=" * 60 + "\n")
+    # endregion
+
+    return gcr
 
 
-def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
+def preprocess_data_m5salesdb(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
     """
     Preprocesses sales, sell prices, and calendar datasets for time series analysis.
 
@@ -392,136 +460,5 @@ def preprocess_data(sales: pd.DataFrame, sell_prices: pd.DataFrame, calendar: pd
     return sales
 
 
-def split_data(X: pd.DataFrame,
-               Y: pd.DataFrame,
-               # look_back_days: int = 365
-               **kwargs,
-               ) -> Tuple[pd.DataFrame, pd.DataFrame,
-                          pd.DataFrame, pd.DataFrame,
-                          pd.DataFrame, pd.DataFrame,
-                          Optional[Dict[str, any]],
-                          Optional[Dict[str, any]]]:
-    """
-    Splits the dataset into training, validation, and an extended test set to accommodate sequential
-    prediction needs. The training data covers days 1 - 1911, the validation set 1912 - 1940, the test set 1941 - 1969.
-    The first day of the test set (1941) includes the number of items sold that day (in "sold"), whereas the following
-    days will contain a zero by default, as that value must be predicted.
-
-    The training set is used for model training, the validation set for model tuning and validation, and
-    the extended test set for conducting sequential predictions where each day's forecast can be informed
-    by the actual or predicted sales data from preceding days.
-
-    Because the multi-day prediction problem is to be solved in a sequential way, the test set is extended backward to
-    include a specified number of look-back days to enable feature computation for days 1942 - 1969, that depend on the
-    model prediction of "sold" and on historical values of "sold" (such as lagged or rolling window features).
-
-    Args:
-        X (pd.DataFrame): DataFrame containing the features, with 'd' indicating the day.
-        Y (pd.DataFrame): DataFrame containing the target variable, aligned with X.
-        **kwargs:
-            look_back_days (int): Number of days prior to the test period to include in the extended test set for feature computation.
-
-    Returns:
-        X_train (pd.DataFrame): Features for the training set.
-        Y_train (pd.DataFrame): Target variable for the training set.
-        X_val (pd.DataFrame): Features for the validation set.
-        Y_val (pd.DataFrame): Target variable for the validation set.
-        X_test_extended (pd.DataFrame): Features for the extended test set, including the look-back period for feature computation and the actual prediction period.
-        Y_test (pd.DataFrame): Target variable for the actual test period, not including the look-back days.
-        aux_split_params (Optional[Dict[str, any]]): Additional parameters like 'start_day_for_prediction' that may be useful for prediction.
-    """
-    # Checking required arguments
-    look_back_days = kwargs.get('look_back_days_sequential_prediction', None)
-    if look_back_days is None or look_back_days < 0:
-        raise ValueError("look_back_days_sequential_prediction must be provided (>=0).")
-
-    # Note: 'Y' is assumed to have a multi-index of ('id', 'd') and a column 'sold_next_day'. Resetting the index is not necessary
-    X_train = X.loc[(slice(None), slice(None, 1911)), :]
-    Y_train = Y.loc[(slice(None), slice(None, 1911)), :]
-    X_val = X.loc[(slice(None), slice(1912, 1940)), :]
-    Y_val = Y.loc[(slice(None), slice(1912, 1940)), :]
-    X_test_extended = X.loc[(slice(None), slice(1941 - look_back_days, None)), :]  # Extend the test set back by `look_back_days`
-    Y_test = Y.loc[(slice(None), slice(1941, None)), :]
-
-    cv_indices = None
-
-    # Prepare optional returns with additional information
-    aux_split_params = {
-        'start_day_for_prediction': 1941,  # Day from which "actual" predictions start, after the look-back period
-        "X_val": X_val,
-        "Y_val": Y_val,
-    }
-
-    return X_train, Y_train, X_val, Y_val, X_test_extended, Y_test, cv_indices, aux_split_params
-
-
-def subsample_items(X: pd.DataFrame, Y: pd.DataFrame, cv_indices: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None, subsampling_rate: float = 1.0, random_seed: int = 42) -> Tuple[
-    pd.DataFrame, pd.DataFrame, List[Tuple[np.ndarray, np.ndarray]]]:
-    """
-    Randomly selects a specified number of unique items (item_id) and includes all samples for those items.
-
-    Args:
-        X (pd.DataFrame): The features DataFrame containing an 'item_id' column.
-        Y (pd.DataFrame): The target DataFrame with the same indices as X.
-        cv_indices (Optional[List[Tuple[np.ndarray, np.ndarray]]]): CV indices before subsampling.
-        subsampling_rate (float): A number in [0, 1] reflecting the proportion of the original dataset that is retained.
-        random_seed (int): The seed used for reproducibility of the random selection.
-
-    Returns:
-        Tuple[pd.DataFrame, pd.DataFrame, List[Tuple[np.ndarray, np.ndarray]]]: A tuple containing the sampled feature and target DataFrames, and optionally the adjusted CV indices.
-    """
-    if subsampling_rate >= 1:  # Skip the whole function is the sampling rate is 1 (or erroneously higher)
-        sampled_X = X
-        sampled_Y = Y
-        adjusted_cv_indices = cv_indices
-
-    else:
-        # Ensure Y's index aligns with X
-        if not X.index.equals(Y.index):
-            raise ValueError("Indices of X and Y must match.")
-
-        # Get unique item_ids
-        unique_items = X['item_id'].unique()
-
-        # Calculate the number of items to sample
-        num_items_to_sample = max(1, int(len(unique_items) * subsampling_rate))
-        num_items_to_sample = min(num_items_to_sample, len(unique_items))  # Safeguard
-
-        # Randomly select unique item_ids
-        rng = np.random.default_rng(random_seed)  # Use numpy's random generator for a seed
-        selected_items = rng.choice(unique_items, size=num_items_to_sample, replace=False)
-
-        # Filter X and Y to include only rows with the selected item_ids
-        sampled_X = X[X['item_id'].isin(selected_items)]
-        sampled_Y = Y.loc[sampled_X.index]
-
-        # Before resetting the index, adjust CV indices if provided
-        adjusted_cv_indices = None
-        if cv_indices is not None:
-            """Example: 
-            X.index [0 1 2 3 4 5 6 7 8 9] (dataset index before sampling)
-            sampled_X.index: [2 3 5 7 8] (dataset index after sampling)
-            cv_indices: [([0 1 2 3 4],[5 6 7 8 9 10]),...] (cv_indices before sampling)
-            """
-            # Convert original indices to a mask
-            max_index = X.index.max()  # 9
-            all_indices_mask = np.zeros(max_index + 1, dtype=bool)
-            all_indices_mask[sampled_X.index] = True  # Mask [False False True True False True False True True False] (indicates preserved samples, refers to original X.index)
-
-            adjusted_cv_indices = []
-            for train_idx, test_idx in cv_indices:  # train_idx: [0 1 2 3 4] test_idx: [5 6 7 8 9]
-                # Apply the mask to keep only the indices that exist in the subsampled dataset
-                valid_train_idx = train_idx[np.in1d(train_idx, sampled_X.index)]  # valid_train_idx: [2 3] (refers to mask, i.e. original X.index)
-                valid_test_idx = test_idx[np.in1d(test_idx, sampled_X.index)]  # valid_test_idx: [5 7 8] (refers to mask, i.e. original X.index)
-
-                # Convert valid indices to positions within the subsampled dataset
-                train_positions = np.where(np.in1d(sampled_X.index, valid_train_idx))[0]  # train_positions: [0 1] (cv_indices adapted to sampled_X.index)
-                test_positions = np.where(np.in1d(sampled_X.index, valid_test_idx))[0]  # test_positions: [2 3 4] (cv_indices adapted to sampled_X.index)
-
-                adjusted_cv_indices.append((train_positions, test_positions))
-
-        # Now, reset the indices of sampled_X and sampled_Y
-        # sampled_X = sampled_X.reset_index(drop=True)  # Not necessary to reset the index if Y has ("id", "d") as index
-        # sampled_Y = sampled_Y.reset_index(drop=True)  # Not necessary to reset the index if Y has ("id", "d") as index
-
-    return sampled_X, sampled_Y, adjusted_cv_indices
+def preprocess_data_passthrough(*args, **kwargs):
+    return (args, kwargs) if kwargs else args
