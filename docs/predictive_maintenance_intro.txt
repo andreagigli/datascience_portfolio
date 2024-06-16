@@ -1,0 +1,65 @@
+### Overview of Predictive Maintenance
+
+Predictive maintenance (PdM) involves using data-driven techniques to predict when equipment failure might occur so that maintenance can be performed just in time to prevent unplanned downtime. This approach contrasts with reactive maintenance (fixing things when they break) and preventive maintenance (regularly scheduled maintenance regardless of equipment condition).
+
+
+### Problem Definition
+
+In predictive maintenance, tasks are categorized into diagnostic and prognostic types. Diagnostic tasks focus on identifying and understanding the current condition of equipment, while prognostic tasks aim to anticipate when a component is likely to fail. 
+
+Diagnostic tasks in predictive maintenance involve fault detection, fault diagnosis, anomaly detection, and health state classification. Fault detection uses classification methods to identify when a component is failing, relying on a dataset of labeled failure events. Fault diagnosis involves classifying these detected faults into predefined fault classes. Anomaly detection employs unsupervised learning methods to identify when a component is operating anomalously, indicating unusual behavior that may not yet be classified as a fault. Health state classification categorizes the current state of equipment into conditions such as healthy, degraded, and critical, based on current and historical information.
+
+Prognostic tasks in predictive maintenance involve Remaining Useful Life (RUL) estimation and fault prognosis. RUL estimation is typically modeled as a regression problem, aiming to predict the remaining operational time before maintenance or replacement is necessary. Fault prognosis estimates the probability of failure within a predefined time horizon, providing a likelihood of when a component might fail. 
+
+
+### Frameworks for Predictive Maintenance
+
+These diagnostic and prognostic tasks can be further grouped into different frameworks, specifically Condition-Based Maintenance (CBM) and Prognostics and Health Management (PHM). In most complex use cases, predictive maintenance is used as a synonym of PHM. 
+
+CBM focuses on diagnostic tasks and aims at identifying components deterioration in realtime and triggering maintenance only when needed. It is suitable in industrial applications where simple realtime monitoring, without prognosis, is sufficient to avoid downtime. 
+
+PHM combines both diagnostic and prognostic tasks, and high-level decision making to not only detect deterioration in realtime but also to plan maintenance in advance. It is used in industries where it is necessary to guarantee uptime through strategic management. PHM inclused steps such as data acquisition and processing, realtime diagnostics of faults and anomalies, current health assessment based on historical data, prognostics of RUL and future faults, and decision support. 
+
+
+### Common Modeling Approaches
+
+1. **Regression Models**: Used to predict the RUL or for fault prognosis. Examples: Linear Regression, Support Vector Regression (SVR), Random Forest Regression, Gradient Boosting Regression, Neural Networks (e.g., LSTM for time series data).
+
+2. **Classification Models**: Used for health state classification, fault detection and diagnosis. Examples: Logistic Regression, Decision Trees, Random Forest Classification, Support Vector Machines (SVM), Neural Networks.
+
+3. **Unsupervised Models for Anomaly Detection**: Used to identify deviations from normal operational behavior. These can be grouped into models that directly identify anomalies and those based on reconstruction error. The former include Isolation Forest, One-Class SVM, and DBSCAN. The latter include LSTM Autoencoders (LSTM-AE) and Principal Component Analysis (PCA).
+
+
+### Steps to Solve the Problem
+
+1. **Data Collection**: Gathering data from sensors, logs, and maintenance records. In robotics and industrial applications, this typically includes:
+	- **Vibration**: Measurements from accelerometers capturing vibrations in machinery to detect misalignment, imbalance, or bearing faults.
+	- **Acoustic Signals**: Ultrasonic audio data from microphones to identify changes in noise patterns indicative of mechanical issues.
+	- **Oil Analysis**: Analysis of lubricant samples to monitor wear or contamination. This includes presence of wear particles or dirt, viscosity changes, additive depletion, presence of chemical changes such as oxidation. 
+	- **Temperature**: Readings from thermocouples or infrared sensors to monitor overheating in motors, bearings, and other components.
+	- **Pressure**: Data from pressure sensors in hydraulic and pneumatic systems to detect leaks or blockages.
+	- **Current and Voltage**: Electrical measurements to monitor the health of motors and other electrical components.
+	- **Speed and Torque**: Information from rotary encoders or torque sensors to detect load changes or mechanical resistance.
+	- **Environmental conditions**: Data on humidity, ambient temperature, and other environmental factors that could affect machine performance.
+	- **Logs**: Log of the errors occurred and maintenance performed. 
+	- **Hardware characteristics**: Such as hardware type, model, age, etc.
+	- **Failure history**: Log of the failures, optionally including the failure type, to be used as label for fault detection, diagnosis, or prognosis. 
+
+2. **Data Preprocessing**: Cleaning, normalizing, and transforming data to make it suitable for model training.
+
+Cleaning, normalizing, standardizing and transforming data to make it suitable for model training. Normalization (in [0, 1]) and standardization  (mu=0, sigma=1) only change the data range but not the overall shape. The former is necessary for k-NN, the latter for linear regression, linear SVM, and PCA. In incremental learning systems, data transformations must also be implemented incrementally. 
+
+3. **Feature Engineering**: When traditional machine learning algorithms are used, features are extracted over a rolling window to capture temporal patterns and trends. 
+	- **Features for Telemetry Data**: This includes vibration, acoustic signals, oil analysis, temperature, pressure, voltage, speed and torque. Time domain features include mean, standard deviation, RMS, crest factor. Frequency-domain features include spectral centroid (mean), bandwidth (range), and roll-off (percentile) of the psd. Time-frequency include the approximation and detail coefficients and of wavelet transforms, summarized using their mean, variance and energy.
+	- **Error and maintenance logs**: For error logs, features include the count of each error type within the window and the total number of errors. Maintenance logs are characterized by the time since the last maintenance and the frequency of maintenance actions within the window.	
+The design matrix is then organized so that each row represents a specific time window for a hw component. Each row includes the metadata (e.g. timestamp, hw ID), and extracted features. The shape is therefore (n_hw_components * n_windows, n_features + n_metadata).
+
+In contrast, for deep learning approaches like LSTM autoencoders, no features must be extracted manually. The design matrix is organized as a 3-dimensional tensor with the shape (n_hw_components, sequence_length, n_signals). Each row represents a sequence of observations for a specific hardware component, capturing all associated signals (e.g., vibration, temperature, pressure) over time. Sequences are fed to the network one at a time, with each sequence having size (sequence_length, n_signals). The chosen sequence length depends on the data and may entail a specific number of timesteps of interest or an entire operational cycle. If a sequence is too long to be processed in one go, it can be split into smaller sub-sequences. Metadata such as component ID is typically included in a separate matrix of size (n_hw_components, n_metadata) and is integrated in the network at the latent level through concatenation with the output of the LSTM encoder and subsequent dense mixing. The structure would therefore be input(e.g. 50, 5) -> LSTM_encoder(64) -> (64), concatenate(64 + 1 meta) -> (65), dense(64) -> (64), RepeatVector(50) -> (50, 64), LSTM_decoder(64) -> (50, 64), LSTM_decoder(5) -> (50, 5).
+
+4. **Model Building**: Developing predictive models using machine learning techniques.
+
+5. **Model Evaluation**: Assessing the model's accuracy and reliability.
+
+6. **Deployment**: Implementing the model in a production environment for real-time prediction and maintenance scheduling (Docker, Kubernetes, Flask, REST APIs).
+
+
