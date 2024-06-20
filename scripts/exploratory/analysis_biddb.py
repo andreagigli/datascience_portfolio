@@ -3,17 +3,20 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from scipy.interpolate import griddata
 from scipy.signal import periodogram
+import seaborn as sns
 
 from datetime import datetime
 
 from scipy.stats import randint, loguniform
+from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import KNNImputer
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.linear_model import Ridge
-from sklearn.metrics import r2_score
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.model_selection import RandomizedSearchCV, GroupKFold
 from sklearn.preprocessing import PowerTransformer
 
 from src.eda.eda_misc import plot_data_distribution, check_outliers, evaluate_imputation, plot_pairplots, compute_relationship
@@ -371,6 +374,24 @@ print(f"Y_test shape: {Y_test.shape}")
 
 ....
 """
+# Compute baseline performance with a DummyRegressor
+baseline_model = DummyRegressor(strategy="mean")
+baseline_model.fit(X_train, Y_train)
+Y_train_baseline_pred = baseline_model.predict(X_train)
+Y_dev_baseline_pred = baseline_model.predict(X_dev)
+Y_test_baseline_pred = baseline_model.predict(X_test)
+# Back-transform the baseline predictions
+Y_train_back = pt_target.inverse_transform(Y_train.values.reshape(-1, 1))
+Y_dev_back = pt_target.inverse_transform(Y_dev.values.reshape(-1, 1))
+Y_test_back = pt_target.inverse_transform(Y_test.values.reshape(-1, 1))
+Y_train_baseline_pred_back = pt_target.inverse_transform(Y_train_baseline_pred.reshape(-1, 1))
+Y_dev_baseline_pred_back = pt_target.inverse_transform(Y_dev_baseline_pred.reshape(-1, 1))
+Y_test_baseline_pred_back = pt_target.inverse_transform(Y_test_baseline_pred.reshape(-1, 1))
+# Compute baseline MAE for training, development, and test sets
+baseline_train_mae_back = mean_absolute_error(Y_train_back, Y_train_baseline_pred_back)
+baseline_dev_mae_back = mean_absolute_error(Y_dev_back, Y_dev_baseline_pred_back)
+baseline_test_mae_back = mean_absolute_error(Y_test_back, Y_test_baseline_pred_back)
+
 # # Define the model
 # model = lgb.LGBMRegressor()
 #
@@ -384,22 +405,26 @@ print(f"Y_test shape: {Y_test.shape}")
 # }
 
 # Define the model
-model = RandomForestRegressor(max_features="sqrt")
+model = RandomForestRegressor(criterion="friedman_mse")
 
 # Define the hyperparameters to optimize
 param_distributions = {
     'n_estimators': randint(100, 500),  # Number of trees in the forest
-    'max_depth': randint(10, 50),  # Maximum depth of the tree
+    'max_depth': randint(10, 30),  # Maximum depth of the tree
 }
 
+# Create kfold split based on hotel_id
+group_kfold = GroupKFold(n_splits=3)
+groups = X_train['hotel_id']
+splits = list(group_kfold.split(X_train, Y_train, groups=groups))
 
 # Define the RandomizedSearchCV
 random_search = RandomizedSearchCV(
     estimator=model,
     param_distributions=param_distributions,
     n_iter=10,  # Number of parameter settings that are sampled
-    cv=3,
-    scoring="r2",
+    cv=splits,
+    scoring="neg_mean_absolute_error",
     verbose=3,  # Verbosity level
     random_state=0,
 )
@@ -412,7 +437,46 @@ random_search.fit(X_train, Y_train)
 best_model = random_search.best_estimator_
 print("\nBest hyperparameters found:")
 print(random_search.best_params_)
-print(f"Best training set R2 score: {random_search.best_score_}")
+print(f"Best training set negative MAE: {random_search.best_score_}")
+
+
+
+# If only two hyperparameters were optimized, plot a heatmap of the scores.
+results = random_search.cv_results_
+if len(param_distributions) == 2:
+    # Extract the hyperparameters and corresponding scores
+    param1 = list(param_distributions.keys())[0]
+    param2 = list(param_distributions.keys())[1]
+    param1_values = np.array(results['param_' + param1].data, dtype=float)
+    param2_values = np.array(results['param_' + param2].data, dtype=float)
+    scores = np.array(results['mean_test_score'], dtype=float)
+
+    data_plot = pd.DataFrame({
+        param1: param1_values,
+        param2: param2_values,
+        'score': scores
+    })
+
+    # Create a grid for interpolation
+    grid_x, grid_y = np.mgrid[min(param1_values):max(param1_values):100j, min(param2_values):max(param2_values):100j]
+
+    # Interpolate the scores
+    grid_z = griddata((param1_values, param2_values), scores, (grid_x, grid_y), method='cubic')
+
+    # Plot the interpolated heatmap using imshow
+    plt.figure(figsize=(10, 8))
+    plt.imshow(grid_z.T, extent=(min(param1_values), max(param1_values), min(param2_values), max(param2_values)),
+               origin='lower', cmap='viridis', aspect='auto')
+    plt.colorbar(label='Negative MAE')
+    plt.title(f"Hyperparameter Optimization Results\n{param1} vs {param2}")
+    plt.xlabel(param1)
+    plt.ylabel(param2)
+
+    # Overlay the tested hyperparameter pairs
+    plt.scatter(param1_values, param2_values, c='red', s=50, edgecolor='black',
+                zorder=5)  # Add dots for tested hyperparameters
+
+
 
 # Train the model with the best hyperparameters on the full training set
 print("\nTraining the best model on the full training set...")
@@ -460,15 +524,15 @@ Y_test_back_df = pd.DataFrame({
     'predicted': Y_test_pred_back.squeeze(),
 })
 
+# Evaluate the model on the training set with back-transformed values
+print("\nEvaluating the model on the training set...")
+train_mae_back = mean_absolute_error(Y_train_back, Y_train_pred_back)
+print(f"Back-transformed development set MAE score: {train_mae_back}")
+
 # Evaluate the model on the development set with back-transformed values
 print("\nEvaluating the model on the development set...")
-dev_r2_back = r2_score(Y_dev_back, Y_dev_pred_back)
-print(f"Back-transformed development set R2 score: {dev_r2_back}")
-
-# Evaluate the model on the test set with back-transformed values
-print("\nEvaluating the model on the test set...")
-test_r2_back = r2_score(Y_test_back, Y_test_pred_back)
-print(f"Back-transformed test set R2 score: {test_r2_back}")
+dev_mae_back = mean_absolute_error(Y_dev_back, Y_dev_pred_back)
+print(f"Back-transformed development set MAE score: {dev_mae_back}")
 
 # Plotting the results as scatterplots
 plt.figure(figsize=(15, 5))
@@ -477,21 +541,21 @@ plt.subplot(1, 3, 1)
 plt.scatter(Y_train_back, Y_train_pred_back, alpha=0.5)
 plt.xlabel("Actual")
 plt.ylabel("Predicted")
-plt.title(f"Training Set\nR2: {r2_score(Y_train_back, Y_train_pred_back):.2f}")
+plt.title(f"Training Set\nMAE: {train_mae_back:.2f}")
 
 # Development set plot
 plt.subplot(1, 3, 2)
 plt.scatter(Y_dev_back, Y_dev_pred_back, alpha=0.5)
 plt.xlabel("Actual")
 plt.ylabel("Predicted")
-plt.title(f"Development Set\nR2: {dev_r2_back:.2f}")
+plt.title(f"Development Set\nMAE: {dev_mae_back:.2f}")
 
 # Test set plot
 plt.subplot(1, 3, 3)
 plt.scatter(Y_test_back, Y_test_pred_back, alpha=0.5)
 plt.xlabel("Actual")
 plt.ylabel("Predicted")
-plt.title(f"Test Set\nR2: {test_r2_back:.2f}")
+plt.title(f"Test Set")
 
 plt.tight_layout()
 
@@ -502,27 +566,30 @@ plt.figure(figsize=(15, 5))
 # Training set plot
 plt.subplot(1, 3, 1)
 plt.plot(Y_train_back, label="Actual")
-plt.plot(Y_train_pred_back, label="Predicted", color='orange')
+plt.plot(Y_train_pred_back, label="RF Predicted", color='orange')
+plt.plot(Y_train_baseline_pred_back, 'r--', label="Baseline")
 plt.xlabel("Index")
 plt.ylabel("Value")
-plt.title(f"Training Set\nR2: {r2_score(Y_train_back, Y_train_pred_back):.2f}")
+plt.title(f"Training Set\nRF MAE: {train_mae_back:.2f}, Baseline MAE: {baseline_train_mae_back:.2f}")
 plt.legend()
 
 # Development set plot
 plt.subplot(1, 3, 2)
 plt.plot(Y_dev_back, label="Actual")
-plt.plot(Y_dev_pred_back, label="Predicted", color='orange')
+plt.plot(Y_dev_pred_back, label="RF Predicted", color='orange')
+plt.plot(Y_dev_baseline_pred_back, 'r--', label="Baseline")
 plt.xlabel("Index")
 plt.ylabel("Value")
-plt.title(f"Development Set\nR2: {dev_r2_back:.2f}")
+plt.title(f"Development Set\nRF MAE: {dev_mae_back:.2f}, Baseline MAE: {baseline_dev_mae_back:.2f}")
 plt.legend()
 
 # Test set plot
 plt.subplot(1, 3, 3)
-plt.plot(Y_test_pred_back, label="Predicted", color='orange')
+plt.plot(Y_test_pred_back, label="RF Predicted", color='orange')
+plt.plot(Y_test_baseline_pred_back, 'r--', label="Baseline")
 plt.xlabel("Index")
 plt.ylabel("Value")
-plt.title(f"Test Set\nR2: {test_r2_back:.2f}")
+plt.title(f"Test Set")
 plt.legend()
 
 plt.tight_layout()
@@ -535,3 +602,5 @@ print(f"Saving results to {output_folder}")
 Y_train_back_df.to_csv(os.path.join(output_folder, "train_predictions.csv"), index=False)
 Y_dev_back_df.to_csv(os.path.join(output_folder, "dev_predictions.csv"), index=False)
 Y_test_back_df.to_csv(os.path.join(output_folder, "test_predictions.csv"), index=False)
+
+plt.show()
