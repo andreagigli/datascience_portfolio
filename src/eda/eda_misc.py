@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.figure import Figure
-from scipy.stats import skew, kurtosis
+from scipy.stats import skew, kurtosis, ks_2samp
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
 from sklearn.feature_selection import SelectKBest, mutual_info_classif, mutual_info_regression, f_regression, f_classif, r_regression, chi2
@@ -49,7 +49,8 @@ def check_outliers(data: pd.DataFrame,
     # Sample data if necessary
     if sample_size and sample_size < len(data):
         data = subsample_regular_interval(df=data, sample_size=sample_size)
-        color_labels = subsample_regular_interval(df=color_labels, sample_size=sample_size)
+        if color_labels is not None:
+            color_labels = subsample_regular_interval(df=color_labels, sample_size=sample_size)
 
     print("\n### Outliers in the continuous features ###\n")
     print("Detecting outliers with Random Isolation Forest:")
@@ -330,6 +331,49 @@ def compute_relationship(data: pd.DataFrame,
     return results, fig_heatmap_relationship
 
 
+def evaluate_imputation(
+        data: pd.DataFrame,
+        variable: str,
+        imputed_mask: Union[str, pd.Series, List[int], List[bool]]
+) -> None:
+    """
+    Evaluates the imputation of a specified variable by comparing the distributions
+    of observed and imputed values. Creates overlapping histograms using Seaborn
+    and writes the results of the Kolmogorov-Smirnov test in the title of the image.
+
+    Args:
+        data (pd.DataFrame): The DataFrame containing the data.
+        variable (str): The name of the variable to evaluate.
+        imputed_mask (Union[str, pd.Series, List[int], List[bool]]): A string (column name in the DataFrame)
+                                                                     or a Series/array/list indicating
+                                                                     which values are imputed.
+    """
+    if isinstance(imputed_mask, str):
+        imputed_mask = data[imputed_mask]
+    elif isinstance(imputed_mask, (list, pd.Series)):
+        if len(imputed_mask) != len(data):
+            raise ValueError("The length of imputed_mask must match the length of the data.")
+        if isinstance(imputed_mask, list):
+            imputed_mask = pd.Series(imputed_mask)
+        if not imputed_mask.isin([0, 1, True, False]).all():
+            raise ValueError("imputed_mask must contain only boolean values or 0/1.")
+
+    observed_values = data.loc[imputed_mask == 0, variable]
+    imputed_values = data.loc[imputed_mask == 1, variable]
+
+    # Perform Kolmogorov-Smirnov test
+    ks_stat, p_value = ks_2samp(observed_values, imputed_values)
+
+    # Create overlapping histograms
+    plt.figure(figsize=(12, 6))
+    sns.histplot(observed_values, bins=30, color='blue', label='Observed', stat="density")
+    sns.histplot(imputed_values, bins=30, color='orange', label='Imputed', stat="density")
+    plt.xlabel(variable)
+    plt.ylabel('Density')
+    plt.legend()
+    plt.title(f'Distribution of Observed and Imputed {variable}\nKS test statistic={ks_stat:.4f}, p-value={p_value:.4e}')
+
+
 def plot_clusters_2d(data: pd.DataFrame,
                      columns_to_plot: Optional[List[str]] = None,
                      color_labels: Optional[pd.Series] = None,
@@ -353,7 +397,8 @@ def plot_clusters_2d(data: pd.DataFrame,
     # Sample data if necessary
     if sample_size < len(data):
         data = subsample_regular_interval(df=data, sample_size=sample_size)
-        color_labels = subsample_regular_interval(df=color_labels, sample_size=sample_size)
+        if color_labels is not None:
+            color_labels = subsample_regular_interval(df=color_labels, sample_size=sample_size)
 
     # Normalize the data
     scaler = StandardScaler()
@@ -670,7 +715,7 @@ def plot_pairplots(data: pd.DataFrame,
         non_target_columns = columns_to_plot
 
     # Check if color_labels have the same size of the data
-    if len(color_labels) != len(data):
+    if color_labels is not None and len(color_labels) != len(data):
         color_labels = None
 
     # Sample data if necessary

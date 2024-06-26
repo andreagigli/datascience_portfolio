@@ -69,10 +69,10 @@ def eda_gcrdb(data: DataFrame) -> None:
     print("Pairplot of features vs target ('good_risk').\nUseful to inform feature engineering and model selection.\n")
     plot_pairplots(data, target_columns=["good_risk"], color_labels=data["good_risk"], sample_size=100)
 
-    print("Grouped stripplots plots of discrete features vs target ('good_risk').\nUseful to inform feature engineering and model selection.\n")
+    print("For discrete target. Grouped stripplots plots of discrete features vs target ('good_risk').\nUseful to inform feature engineering and model selection.\n")
     plot_grouped_stripplots(data, target_column="good_risk", columns_of_interest=cols_discrete, sample_size=500, jitter=0.2)
 
-    print("Grouped boxplots of continuous features vs target ('good_risk').\nUseful to inform feature engineering and model selection.\n")
+    print("For discrete target. Grouped boxplots of continuous features vs target ('good_risk').\nUseful to inform feature engineering and model selection.\n")
     plot_grouped_violinplots(data, target_column="good_risk", columns_of_interest=cols_continuous, sample_size=100)
 
     print("General relationships between features and target ('good_risk').\nMutual information is used to explore nonlinear relationships regardless of their discrete or continuous type.\nUseful to inform feature engineering and model selection.\n")

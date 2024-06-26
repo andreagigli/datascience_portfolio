@@ -136,13 +136,9 @@ def downcast(df):
             max_val_scaled = max_val * 10
             min_val_scaled = min_val * 10
             # Determine appropriate float type
-            # Check if float16 can handle the range safely
-            if min_val_scaled > np.finfo(np.float16).min and max_val_scaled < np.finfo(np.float16).max:
-                df[col] = df[col].astype(np.float16)
-            elif min_val_scaled > np.finfo(np.float32).min and max_val_scaled < np.finfo(np.float32).max:
+            # Check if float32 can handle the range safely
+            if max_val_scaled < np.finfo(np.float32).max:
                 df[col] = df[col].astype(np.float32)
-            else:
-                df[col] = df[col].astype(np.float64)
 
         elif pd.api.types.is_object_dtype(col_type):
             if col == 'date':
@@ -157,6 +153,41 @@ def downcast(df):
         df = df["value"]
 
     return df
+
+
+def print_df_groups(grouped: pd.core.groupby.DataFrameGroupBy, n_groups_to_print: Union[int, str] = 'all') -> None:
+    """
+    Prints the specified number of groups from a grouped DataFrame.
+
+    Args:
+        grouped (pd.core.groupby.DataFrameGroupBy): The grouped DataFrame object.
+        n_groups_to_print (Union[int, str], optional): The number of groups to print. Defaults to 'all'.
+                                                      If 'all', prints all groups.
+
+    Returns:
+        None: This function prints the groups and does not return any value.
+
+    Example usage:
+    df = pd.DataFrame({
+        'a': ['foo', 'foo', 'bar', 'bar'],
+        'b': ['one', 'two', 'one', 'two'],
+        'c': [1, 2, 3, 4],
+        'd': [5, 6, 7, 8]
+    })
+    grouped = df.groupby(['a', 'b'])[['c', 'd']]
+    print_df_groups(grouped, 2)
+    """
+    groups = list(grouped)
+    if n_groups_to_print == 'all':
+        n_groups_to_print = len(groups)
+    else:
+        n_groups_to_print = min(n_groups_to_print, len(groups))
+
+    for i in range(n_groups_to_print):
+        group_name, group_df = groups[i]
+        print(f"Group: {group_name}")
+        print(group_df)
+        print()
 
 
 def pprint_db(df: pd.DataFrame, title: [str] = None) -> None:
