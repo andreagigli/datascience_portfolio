@@ -29,7 +29,7 @@ python ./scripts/exploratory/analysis_template.py
 
 --- SALES PREDICTION ON M5 SALES DATASET ---
 PREFERRED: using LGBMRegressor (handles large datasets, without need to one-hot encode cathegorical variables)
-python analysis_exampledb.py
+python ./scripts/exploratory/analysis_template.py
 --data_path ./data/external/m5salesdb/
 --data_loading_fn load_m5salesdb
 --model sklearn_compatible_LGBMRegressor
@@ -53,7 +53,7 @@ python analysis_exampledb.py
 --output_figures_dir ./outputs/figures/
 
 IF FEATURES WERE PRECOMPUTED:
-python analysis_exampledb.py
+python ./scripts/exploratory/analysis_template.py
 --precomputed_features_path ./data/processed/m5salesdb_debug_100/
 --model sklearn_compatible_LGBMRegressor
 --hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
@@ -76,7 +76,7 @@ python analysis_exampledb.py
 --output_figures_dir ./outputs/figures/
 
 FASTER, FOR DEBUG:
-python analysis_exampledb.py
+python ./scripts/exploratory/analysis_template.py
 --precomputed_features_path ./data/processed/m5salesdb_debug_10/
 --model sklearn_compatible_LGBMRegressor
 --hparams "{\"sklearn_compatible_LGBMRegressor__num_leaves\": \"randint(20, 200)\", \"sklearn_compatible_LGBMRegressor__learning_rate\": \"loguniform(0.001, 1)\", \"sklearn_compatible_LGBMRegressor__n_estimators\": 1000}"
@@ -100,7 +100,7 @@ python analysis_exampledb.py
 
 
 --- LOAN RISK MANAGEMENT ON GERMAN CREDIT RISK DATASET ---
-python analysis_template.py
+python ./scripts/exploratory/analysis_template.py
 --data_path ./data/external/gcrdb/
 --data_loading_fn load_gcrdb
 --preprocessing_fn preprocess_gcrdb
@@ -125,7 +125,7 @@ python analysis_template.py
 --output_figures_dir ./outputs/figures/
 
 (Faster alternative: reload preprocessed data, skip eda, use simpler model and skip hopt)
-python analysis_template.py
+python ./scripts/exploratory/analysis_template.py
 --precomputed_features_path ./data/processed/gcrdb/
 --preprocessing_fn preprocess_gcrdb
 --eda_fn eda_gcrdb
