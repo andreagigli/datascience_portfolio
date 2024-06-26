@@ -63,3 +63,8 @@ In contrast, for deep learning approaches like LSTM autoencoders, no features mu
 6. **Deployment**: Implementing the model in a production environment for real-time prediction and maintenance scheduling (Docker, Kubernetes, Flask, REST APIs).
 
 
+REFERENCES
+[ML for predictive maintenance, with statistical and DL algorithms, as well as time- and frequency-domain features] * Zhang, Weiting, Dong Yang, and Hongchao Wang. "Data-driven methods for predictive maintenance of industrial equipment: A survey." IEEE systems journal 13.3 (2019): 2213-2227.
+[ML for predictive maintenance, less detailed, some references to datasets] * Carvalho, Thyago P., et al. "A systematic literature review of machine learning methods applied to predictive maintenance." Computers & Industrial Engineering 137 (2019): 106024.
+[ML for anomaly detection (i.e., unsupervised)] * Lekidis, Alexios, et al. "Predictive Maintenance Framework for Fault Detection in Remote Terminal Units." Forecasting 6.2 (2024): 239-265.
+[Simple case study for RUL prediction] Hrnjica, Bahrudin, and Selver Softic. "Explainable AI in manufacturing: a predictive maintenance case study." IFIP International Conference on Advances in Production Management Systems. Cham: Springer International Publishing, 2020. 
