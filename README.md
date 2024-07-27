@@ -111,9 +111,13 @@ portfolio_ML_datascience/
 2. **Generate the `requirements.txt` file (optional)**:
     - If your project does not already have a `requirements.txt`, or if you want to update it, run `pipreqs`:
       ```
-	  cd portfolio_ML_datascience/
+      cd portfolio_ML_datascience/
       pipreqs --force . 
       ```
+    - If the installation in the next step fails due to conflicting versions, try removing the version constraints from the generated requirements.txt file with the following command:
+      ```
+      sed -i 's/==.*//' requirements.txt 
+      ``` 
 
 3. **Install the package**:
     - For a standard installation:
