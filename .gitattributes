@@ -1,2 +1,18 @@
 # Custom merge behavior: do not allow the main's README to be overridden by other branches' one.
 README.md merge=ours
+
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# Explicitly declare text files we want to always be normalized and converted to native line endings on checkout.
+*.c text
+*.h text
+*.cpp text
+*.hpp text
+*.html text
+*.css text
+*.js text
+*.py text
+*.txt text
+*.md text
+
