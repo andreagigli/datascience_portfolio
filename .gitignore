@@ -4,6 +4,7 @@
 *.idea
 *.parquet
 *.pkl
+*.pyc
 
 # Ignore everything in these directories
 models/model_summaries/*
@@ -13,7 +14,7 @@ data/processed/*
 data/raw/*
 outputs/figures/*
 outputs/reports/*
+.vscode/*
 
 # But keep the california_housing.csv, explicitly un-ignored
 !data/external/exampledb/
-*.pyc
