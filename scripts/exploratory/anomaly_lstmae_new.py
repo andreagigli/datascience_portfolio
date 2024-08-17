@@ -4,40 +4,81 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+from datetime import datetime
 from sklearn.preprocessing import MinMaxScaler
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
+
+# Define hyperparameters
+LOSSES = {
+    "mse": nn.MSELoss(), 
+}
+
+HPARAMS = {
+    'learning_rate': 0.001,
+    'hidden_dim': 64,
+    'batch_size': 32,
+    'num_epochs': 100,
+    "loss": "mse",
+}
+
+
+class TimeSeriesDataset(Dataset):
+    def __init__(self, data, sequence_length, padding_value=0):
+        self.data = data
+        self.sequence_length = sequence_length
+        self.padding_value = padding_value
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        if index >= self.sequence_length:
+            return self.data[index - self.sequence_length:index]
+        else:
+            # Pad the sequence if index is less than sequence_length
+            pad_size = self.sequence_length - index
+            padded_sequence = torch.full((pad_size,), self.padding_value, dtype=torch.float32)
+            return torch.cat((padded_sequence, self.data[:index]), dim=0)
+
 
 # Load a synthetic dataset
 data_url = "https://raw.githubusercontent.com/numenta/NAB/master/data/realKnownCause/nyc_taxi.csv"
 data = pd.read_csv(data_url)
 data['value'] = MinMaxScaler().fit_transform(data['value'].values.reshape(-1, 1))
-data = data['value'].values
+data_tensor = torch.tensor(data['value'], dtype=torch.float32).unsqueeze(-1)  # Add feature dimension
 
-# Visualize the data
-plt.plot(data)
-# plt.show(block=True)  # Make plt.show() blocking
+# Define the TimeSeriesDataset class
+class TimeSeriesDataset(Dataset):
+    def __init__(self, data, sequence_length, padding_value=0):
+        self.data = data
+        self.sequence_length = sequence_length
+        self.padding_value = padding_value
 
-# Create sequences for LSTM input
-def create_sequences(data, seq_length):
-    sequences = []
-    for i in range(len(data) - seq_length):
-        sequences.append(data[i:i+seq_length])
-    return np.array(sequences)
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        if index >= self.sequence_length:
+            return self.data[index - self.sequence_length:index]
+        else:
+            pad_size = self.sequence_length - index
+            padded_sequence = torch.full((pad_size, 1), self.padding_value, dtype=torch.float32)
+            return torch.cat((padded_sequence, self.data[:index]), dim=0)
 
 SEQ_LENGTH = 50
-sequences = create_sequences(data, SEQ_LENGTH)
-train_size = int(0.8 * len(sequences))
-train_sequences, test_sequences = sequences[:train_size], sequences[train_size:]
+dataset = TimeSeriesDataset(data_tensor, SEQ_LENGTH)
 
-train_sequences = np.expand_dims(train_sequences, -1)  # Add feature dimension
-test_sequences = np.expand_dims(test_sequences, -1)    # Add feature dimension
+# Split data into training and test sets
+train_size = int(0.8 * len(dataset))
+test_size = len(dataset) - train_size
+train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
 
-# Remove the extra dimension added
-train_sequences = train_sequences.reshape((train_sequences.shape[0], SEQ_LENGTH, -1))
-test_sequences = test_sequences.reshape((test_sequences.shape[0], SEQ_LENGTH, -1))
+train_loader = DataLoader(train_dataset, batch_size=HPARAMS["batch_size"], shuffle=True)
+val_loader = DataLoader(test_dataset, batch_size=HPARAMS["batch_size"], shuffle=False)
 
-# Convert data to torch.float32
-train_sequences = torch.tensor(train_sequences, dtype=torch.float32)
-test_sequences = torch.tensor(test_sequences, dtype=torch.float32)
 
 # Define the LSTM autoencoder model in PyTorch
 class LSTM_Autoencoder(nn.Module):
@@ -47,57 +88,96 @@ class LSTM_Autoencoder(nn.Module):
         self.decoder = nn.LSTM(hidden_dim, input_dim, batch_first=True)
         self.hidden_dim = hidden_dim
 
-    def forward(self, x):
-        x, (hidden, cell) = self.encoder(x)
-        x = hidden.repeat(x.size(1), 1, 1).permute(1, 0, 2)  # Repeat hidden state across sequence length
-        x, _ = self.decoder(x)
-        return x
+    def forward(self, input_seq):
+        """Forward pass for the LSTM Autoencoder.
 
-input_dim = train_sequences.shape[2]
-hidden_dim = 64
-
-model = LSTM_Autoencoder(input_dim, hidden_dim).cuda()
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# Define num_epochs
-num_epochs = 100
-
-# Create DataLoader
-train_loader = torch.utils.data.DataLoader(train_sequences, batch_size=16, shuffle=True)
-val_loader = torch.utils.data.DataLoader(test_sequences, batch_size=16, shuffle=False)
-
-# Train the model
-train_losses = []
-val_losses = []
-
-for epoch in range(num_epochs):
-    model.train()
-    total_train_loss = 0
-    for batch in train_loader:
-        batch = batch.cuda()
-        optimizer.zero_grad()
-        output = model(batch)
-        loss = criterion(output, batch)
-        loss.backward()
-        optimizer.step()
-        total_train_loss += loss.item()
+        The input_seq has shape (batch_size, sequence_length, input_dim).
+        """
+        # Encode the input sequence; LSTM returns both encoder_output (batch_size, sequence_length, hidden_dim) and last hidden_state (n_lstm_layers, sequence_length, hidden_dim)
+        encoder_output, (hidden_state, cell_state) = self.encoder(input_seq)
+        last_hidden_state = hidden_state[-1]
+        
+        # Prepare the hidden_state for decoding by repeating it across the sequence_length; the desired shape is (batch_size, sequence_length, hidden_dim).
+        batch_size = input_seq.size(1)
+        repeated_hidden_state = last_hidden_state.repeat(batch_size, 1, 1)  # Shape (sequence_length, batch_size, hidden_dim)
+        repeated_hidden_state = repeated_hidden_state.permute(1, 0, 2)  # Correct shape (batch_size, sequence_length, hidden_dim)
+        
+        # Reconstruct the input sequence from the repeated hidden_state of the encoder
+        decoded_output, _ = self.decoder(repeated_hidden_state)
+        
+        return decoded_output
     
-    model.eval()
-    total_val_loss = 0
-    with torch.no_grad():
-        for batch in val_loader:
-            batch = batch.cuda()
-            output = model(batch)
-            loss = criterion(output, batch)
-            total_val_loss += loss.item()
-    
-    avg_train_loss = total_train_loss / len(train_loader)
-    avg_val_loss = total_val_loss / len(val_loader)
-    train_losses.append(avg_train_loss)
-    val_losses.append(avg_val_loss)
 
-    print(f'Epoch [{epoch+1}/{num_epochs}], Training Loss: {avg_train_loss:.4f}, Validation Loss: {avg_val_loss:.4f}')
+# Initialize the model
+model = LSTM_Autoencoder(input_dim=1, hidden_dim=HPARAMS['hidden_dim']).cuda()  # Ensure input_dim matches the dataset features
+
+# Initialize the loss function and optimizer
+criterion = LOSSES[HPARAMS['loss']]
+optimizer = optim.Adam(model.parameters(), lr=HPARAMS['learning_rate'])
+
+# Initialize the information log for TensorBoard
+current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+writer = SummaryWriter(f'models/dl_runs/lstmae_experiment/{current_time}')
+
+# Log the model architecture for TensorBoard
+try:
+    sample_batch = next(iter(train_loader))
+    writer.add_graph(model, sample_batch.cuda())
+except Exception as e:
+    print("Error logging model to TensorBoard: ", e)
+
+
+
+def train(model, data_loader, optimizer, criterion):
+    model.train()  # Set the model to training mode
+    total_loss = 0  # Initialize a variable to accumulate the total loss over all batches    
+    for batch in data_loader:  # Loop over each batch of sequences from the DataLoader
+        batch = batch.cuda()  # Move the batch to GPU for faster computation
+        optimizer.zero_grad()  # Clear the gradients of all optimized parameters (important to avoid accumulation)
+        output = model(batch)  # Forward pass: compute the model's output given the inputs        
+        loss = criterion(output, batch)  # Compute the loss between the model's output (reconstructed input) and the target (input of the autoencoder)        
+        loss.backward()  # Backward pass: compute the gradients of the loss with respect to the model's parameters        
+        optimizer.step()  # Update the model's parameters using the computed gradients        
+        total_loss += loss.item()  # Accumulate the loss for this batch (converted to a scalar using `.item()`)    
+    return total_loss / len(data_loader)  # Return the average loss over all batches
+
+def validate(model, data_loader, criterion):
+    model.eval()  # Set the model to evaluation mode
+    total_loss = 0  
+    with torch.no_grad():  # Disable gradient computation, as we don't need to update the model
+        for batch in data_loader:  
+            batch = batch.cuda()  
+            output = model(batch)  
+            loss = criterion(output, batch)  
+            total_loss += loss.item()  
+    return total_loss / len(data_loader)  
+
+# Execute training and validation over epochs
+train_losses = []  # Train loss for each epoch
+val_losses = []  # Validation loss for each epoch
+for epoch in range(HPARAMS['num_epochs']):
+    train_loss = train(model, train_loader, optimizer, criterion)
+    val_loss = validate(model, val_loader, criterion)
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
+    print(f'Epoch {epoch+1}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
+    writer.add_scalar('Loss/Train', train_loss, epoch)
+    writer.add_scalar('Loss/Val', val_loss, epoch)
+
+# Compute final average losses
+final_train_loss = np.mean(train_losses)
+final_val_loss = np.mean(val_losses)
+print(f'Final Training Loss: {final_train_loss:.4f}')
+print(f'Final Validation Loss: {final_val_loss:.4f}')
+final_metrics = {
+    'final_train_loss': final_train_loss,
+    'final_val_loss': final_val_loss
+}
+writer.add_hparams(hparam_dict=HPARAMS, metric_dict=final_metrics)
+
+# Close the TensorBoard writer when done
+writer.close()
+
 
 # Plot training and validation loss
 plt.figure(figsize=(10, 6))
@@ -108,28 +188,44 @@ plt.ylabel('Loss')
 plt.legend()
 plt.show()
 
+
+
+
+
 # Detect anomalies based on reconstruction error
-def detect_anomalies(model, sequences, threshold):
+def detect_anomalies(model, data_loader, threshold):
     model.eval()
+    reconstruction_errors = []
     with torch.no_grad():
-        reconstructions = model(sequences.cuda())
-        mse = torch.mean((sequences.cuda() - reconstructions) ** 2, dim=(1, 2)).cpu().numpy()
-    return mse > threshold, mse
+        for sequences in data_loader:
+            sequences = sequences.cuda()
+            reconstructions = model(sequences)
+            mse = torch.mean((sequences - reconstructions) ** 2, dim=(1, 2)).cpu().numpy()
+            reconstruction_errors.extend(mse)
+    return np.array(reconstruction_errors) > threshold, reconstruction_errors
 
+# Using DataLoader to process data for anomaly detection
+reconstruction_errors = []
 with torch.no_grad():
-    reconstructions = model(test_sequences.cuda())
-    mse = torch.mean((test_sequences.cuda() - reconstructions) ** 2, dim=(1, 2)).cpu().numpy()
+    for sequences in val_loader:
+        sequences = sequences.cuda()
+        reconstructions = model(sequences)
+        mse = torch.mean((sequences - reconstructions) ** 2, dim=(1, 2)).cpu().numpy()
+        reconstruction_errors.extend(mse)
 
-# Set a threshold for anomaly detection
-threshold = np.percentile(mse, 95)
-anomalies, reconstruction_errors = detect_anomalies(model, test_sequences, threshold)
+# Set a threshold for anomaly detection based on the calculated MSE
+threshold = np.percentile(reconstruction_errors, 95)  # Set threshold as 95th percentile of MSE
+anomalies, reconstruction_errors = detect_anomalies(model, val_loader, threshold)
 
 # Visualize reconstruction errors and detected anomalies
 plt.figure(figsize=(10, 6))
 plt.plot(reconstruction_errors, label='Reconstruction Error')
 plt.axhline(y=threshold, color='r', linestyle='--', label='Threshold')
 plt.legend()
-plt.show(block=True)  # Make plt.show() blocking
+plt.show()
+
+
+
 
 # # Since 'anomaly' column is missing, we skip the evaluation part based on ground truth.
 # # Evaluate performance if ground truth is available

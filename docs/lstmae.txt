@@ -1,0 +1,71 @@
+## LSTM Autoencoder
+
+An LSTM autoencoder is a neural network architecture designed to encode sequential input data into a compressed latent representation and then decode it to reconstruct the original sequence. This structure typically includes:
+
+1. **Encoder**: Accepts an input tensor of shape **(number of samples, sequence length, number of features)** (e.g., **(32, 50, 10)**) and produces an encoded output of shape **(number of samples, hidden size)** (e.g., **(32, 64)**), where 64 is the number of LSTM units.
+
+2. **Repeat Layer**: The encoded output is often preliminarily passed through a repeat layer, which repeats the latent representation across the sequence length, transforming it back to a shape **(number of samples, sequence length, hidden size)** (e.g., from **(32, 64)** to **(32, 50, 64)**). This step makes it easier for the decoder to reconstruct the sequence.
+
+3. **Decoder**: The decoder then takes the repeated latent space and reconstructs the original sequence, outputting a tensor of shape **(number of samples, sequence length, number of features)** (e.g., **(32, 50, 10)**).
+
+## LSTM Encoder Structure
+
+Given an input tensor \( \mathbf{x} \) with shape **(32, 50, 10)** and an LSTM layer with 64 units, the LSTM layer processes the input one time step at a time. Each unit processes the feature vector for each sample at that time step, as well as the hidden state from the previous time step, producing an output and updated versions of its own cell state and hidden state.
+
+LSTM units in a layer do not operate independently. Instead, they influence each other through shared weights and biases. Specifically, the hidden state of a certain unit depends linearly on a combination of the previous hidden states of all the other existing units.
+
+### Mathematical Operations of the LSTM Encoder
+
+The **LSTM encoder** primarily computes an **output gate** and updates the **hidden state** accordingly:
+\[
+\mathbf{o}_t = \sigma(\mathbf{W}_o \cdot [\mathbf{h}_{t-1}, \mathbf{x}_t]^T + \mathbf{b}_o)
+\]
+\[
+\mathbf{h}_t = \mathbf{o}_t \odot \tanh(\mathbf{c}_t)
+\]
+
+The hidden state update depends on a separate **cell state**. Keeping the cell state separate from the hidden state is key to the LSTM's ability to retain long-term dependencies. In fact, the cell state can carry information across many time steps without being modified significantly, which prevents the vanishing and exploding gradient problems that traditional RNNs suffer from.
+
+The **cell state** \( \mathbf{c}_t \) is computed as a weighted combination of the previous cell state and a newly computed candidate cell state \( \tilde{\mathbf{c}}_t \):
+\[
+\mathbf{c}_t = \mathbf{f}_t \odot \mathbf{c}_{t-1} + \mathbf{i}_t \odot \tilde{\mathbf{c}}_t
+\]
+
+The **candidate cell state** is computed as:
+\[
+\tilde{\mathbf{c}}_t = \tanh(\mathbf{W}_c \cdot [\mathbf{h}_{t-1}, \mathbf{x}_t]^T + \mathbf{b}_c)
+\]
+
+The weights for this combination are determined by the **forget gate** \( \mathbf{f}_t \) and the **input gate** \( \mathbf{i}_t \):
+\[
+\mathbf{f}_t = \sigma(\mathbf{W}_f \cdot [\mathbf{h}_{t-1}, \mathbf{x}_t]^T + \mathbf{b}_f)
+\]
+\[
+\mathbf{i}_t = \sigma(\mathbf{W}_i \cdot [\mathbf{h}_{t-1}, \mathbf{x}_t]^T + \mathbf{b}_i)
+\]
+
+The dimensionality of the components in the previous formulas is:
+- **Input at time t \( \mathbf{x}_t \)**: Shape **(32, 10)**.
+- **Hidden States \( \mathbf{h} \)**, Cell States, Gates, and Output: Shape **(32, 64)**.
+- **Concatenated Input**: Shape **(32, 74)** after concatenating \( \mathbf{h}_{t-1} \) and \( \mathbf{x}_t \).
+- **Weight Matrices \( \mathbf{W}_f, \mathbf{W}_i, \mathbf{W}_c, \mathbf{W}_o \)**: Shape **(64, 74)**.
+- **Bias Vectors \( \mathbf{b}_f, \mathbf{b}_i, \mathbf{b}_c, \mathbf{b}_o \)**: Shape **(64,)**.
+- **Encoder Output and Hidden State in PyTorch/TensorFlow**: In Pytorch, the encoder output represents includes all the timesteps and has shape **(batch_size, sequence_length, hidden_dim)**. In contrast, the hidden state captures only the final state after processing the entire sequence and has shape **(num_layers, batch_size, hidden_dim)**, where num_layers is the number of LSTM layers stacked in the encoder.
+
+
+## Implementation in PyTorch
+
+```
+class LSTM_Autoencoder(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(LSTM_Autoencoder, self).__init__()
+        self.encoder = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.decoder = nn.LSTM(hidden_dim, input_dim, batch_first=True)
+        self.hidden_dim = hidden_dim
+
+    def forward(self, x):
+        x, (hidden, cell) = self.encoder(x)
+        x = hidden.repeat(x.size(1), 1, 1).permute(1, 0, 2)  # Repeat hidden state across sequence length
+        x, _ = self.decoder(x)
+        return x
+```
