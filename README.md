@@ -19,7 +19,6 @@ portfolio_ML_datascience/
 ├── data/                   # Data used in the project
 │   ├── raw/                # Unprocessed, original data files
 │   ├── processed/          # Cleaned and pre-processed data
-│   │   ├── california_housing.csv  # California housing example dataset
 │   └── external/           # Data from external sources
 │       └── exampledb/      # Example databases for the project
 │
@@ -36,19 +35,32 @@ portfolio_ML_datascience/
 │
 ├── scripts/                # Python scripts for analysis and reporting
 │   ├── exploratory/        # Scripts for initial data exploration and analysis
+│   │   └── analysis_template.py  # Data analysis script. This is the ENTRY POINT for launching different analyses based on CLI calls.
 │   └── report/             # Scripts for generating final reports or presentations
 │
 ├── src/                    # Source code for the project
 │   ├── data/               # Modules to download or generate data
+│   │   ├── load_data_fns.py        # Contains functions to load datasets
+│   │   ├── preprocess_data_fns.py  # Contains functions to preprocess datasets
+│   │   └── split_data_fns.py       # Contains functions to split datasets into training, validation, and test sets
 │   ├── eda/                # Modules for exploratory data analysis
+│   │   ├── eda_fns.py              # Functions for performing exploratory data analysis
+│   │   └── eda_misc.py             # Miscellaneous EDA-related functions
 │   ├── evaluation/         # Modules for evaluating models and analyzing their performance
+│   │   └── evaluate_fns.py         # Functions for model evaluation
 │   ├── features/           # Modules to transform raw data into features for modeling
+│   │   └── features_fns.py         # Functions for feature engineering
 │   ├── models/             # Modules defining various machine learning models
+│   │   └── custom_models.py        # Custom model definitions
 │   ├── optimization/       # Hyperparameter optimization modules for model tuning
+│   │   └── hopt_subsampling_fns.py # Functions for subsampling training and validation sets during hyperparameter optimization
 │   ├── prediction/         # Modules for performing inference
+│   │   └── prediction_fns.py       # Functions for generating predictions
 │   ├── utils/              # Utility modules and helper functions
 │   ├── pipeline/           # Main pipeline scripts and modules
-│   └── __init__.py
+│   ├── __init__.py
+│   ├── data_science_pipeline.py    # Main script to run the data science pipeline
+│   └── register_functions.py       # Script to register functions dynamically
 │
 ├── tests/                  # Automated tests for the project
 │
