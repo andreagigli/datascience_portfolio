@@ -17,5 +17,14 @@ outputs/figures/*
 outputs/reports/*
 .vscode/*
 
-# But keep the california_housing.csv, explicitly un-ignored
+# Un-ignore the directories themselves
+!models/dl_runs/
+!models/model_summaries/
+!models/trained_models/
+!data/
+!data/external/
 !data/external/exampledb/
+!data/processed/
+!data/raw/
+!outputs/figures/
+!outputs/reports/
