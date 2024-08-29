@@ -6,25 +6,31 @@
 *.pkl
 *.pyc
 
-# Ignore everything in these directories
-models/dl_runs/*
-models/model_summaries/*
-models/trained_models/*
-data/external/*
-data/processed/*
-data/raw/*
-outputs/figures/*
-outputs/reports/*
-.vscode/*
+# Ignore everything inside specific directories but keep the directories themselves
+models/dl_runs/**
+!models/dl_runs/.gitkeep
 
-# Un-ignore the directories themselves
-!models/dl_runs/
-!models/model_summaries/
-!models/trained_models/
-!data/
-!data/external/
-!data/external/exampledb/
-!data/processed/
-!data/raw/
-!outputs/figures/
-!outputs/reports/
+models/model_summaries/**
+!models/model_summaries/.gitkeep
+
+models/trained_models/**
+!models/trained_models/.gitkeep
+
+data/external/**
+!data/external/.gitkeep
+!data/external/exampledb/.gitkeep
+
+data/processed/**
+!data/processed/.gitkeep
+
+data/raw/**
+!data/raw/.gitkeep
+
+outputs/figures/**
+!outputs/figures/.gitkeep
+
+outputs/reports/**
+!outputs/reports/.gitkeep
+
+.vscode/**
+

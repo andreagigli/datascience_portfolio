@@ -14,52 +14,45 @@ New data science projects are initiated in isolated branches, leveraging both pr
 ```
 portfolio_ML_datascience/
 │
+├── config/                 # Configuration files, like model parameters and environmental variables
+│
 ├── data/                   # Data used in the project
 │   ├── raw/                # Unprocessed, original data files
 │   ├── processed/          # Cleaned and pre-processed data
+│   │   ├── california_housing.csv  # California housing example dataset
 │   └── external/           # Data from external sources
 │       └── exampledb/      # Example databases for the project
-│           └── california_housing.csv  # California housing example dataset
+│
+├── docs/                   # Project documentation
+│
+├── models/                 # Model files and summaries
+│   ├── dl_runs/            # Deep Learning run outputs
+│   ├── model_summaries/    # Text files or summaries describing model performance
+│   └── trained_models/     # Serialized trained model objects
+│
+├── outputs/                # Output files (e.g., predictions, figures)
+│   ├── figures/            # Generated figures and plots
+│   └── reports/            # Generated analysis reports and plots
 │
 ├── scripts/                # Python scripts for analysis and reporting
 │   ├── exploratory/        # Scripts for initial data exploration and analysis
-│   │   └── analysis_template.py  # Data analysis script. This is the ENTRY POINT for launching different analyses based on CLI calls.
 │   └── report/             # Scripts for generating final reports or presentations
 │
 ├── src/                    # Source code for the project
 │   ├── data/               # Modules to download or generate data
-│   │   ├── load_data_fns.py   # Contains functions to load datasets
-│   │   ├── preprocess_data_fns.py  
-│   │   └── split_data_fns.py  
-│   ├── eda/         # Modules for exploratory data analysis
-│   │   ├── eda_fns.py 
-│   │   └── eda_misc.py 
+│   ├── eda/                # Modules for exploratory data analysis
 │   ├── evaluation/         # Modules for evaluating models and analyzing their performance
-│   │   └── evaluate_fns.py 
 │   ├── features/           # Modules to transform raw data into features for modeling
-│   │   └── features_fns.py  
-│   ├── models/             # Modules and modules defining various machine learning models
-│   │   └── custom_models.py  
+│   ├── models/             # Modules defining various machine learning models
 │   ├── optimization/       # Hyperparameter optimization modules for model tuning
-│   │   └── hopt_subsampling_fns.py  # Functions for subsampling training and validation sets during hyperparameter optimization.
 │   ├── prediction/         # Modules for performing inference
-│   │   └── prediction_fns.py  
 │   ├── utils/              # Utility modules and helper functions
-│   ├── __init__.py
-│   ├── data_science_pipeline.py # Main script to run the data science pipeline
-│   └── register_functions.py # Script to register functions dynamically
+│   ├── pipeline/           # Main pipeline scripts and modules
+│   └── __init__.py
 │
-├── models/                 # Model files and summaries
-│   ├── trained_models/     # Serialized trained model objects
-│   └── model_summaries/    # Text files or summaries describing model performance
-│
-├── outputs/                # Output files (e.g., predictions, figures)
-│   └── reports/            # Generated analysis reports and plots
-│
-├── config/                 # Configuration files, like model parameters and environmental variables
-├── docs/                   # Project documentation
 ├── tests/                  # Automated tests for the project
-├── __init__.py	        		        
+│
+├── __init__.py
 ├── requirements.txt        # List of dependencies for the project
 ├── setup.py                # Setup script for installing the project package
 ├── .gitignore	
